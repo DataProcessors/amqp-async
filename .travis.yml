@@ -7,7 +7,6 @@ php:
 
 before_script:
   - composer install --prefer-source
-  - chmod +x ./bin/ci/before_build.sh
   - ./bin/ci/before_build.sh
 
 script: make test
