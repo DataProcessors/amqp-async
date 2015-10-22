@@ -17,7 +17,7 @@ The recommended way to install amqp-async is with the [Composer](http://getcompo
 Run the following command to use the library in your project: 
 
 ```bash
-composer require DataProcessors/amqp-async
+composer require dataprocessors/amqp-async
 ```
 
 You can also manually edit `composer.json` to add amqp-async as a project requirement.
@@ -26,7 +26,7 @@ You can also manually edit `composer.json` to add amqp-async as a project requir
 // composer.json
 {
     "require": {
-        "DataProcessors/amqp-async": "1.0.*"
+        "dataprocessors/amqp-async": "1.0.*"
     }
 }
 ```

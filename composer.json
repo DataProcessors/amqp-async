@@ -1,7 +1,7 @@
 {
     "name": "dataprocessors/amqp-async",
     "type": "library",
-    "description": "This library is an implementation of the AMQP 0.9.1 protocol for PHP designed to work with Icicle.",
+    "description": "Async AMQP 0.9.1 client for PHP designed to work with Icicle.",
     "keywords": ["rabbitmq", "message", "queue"],
     "homepage": "https://github.com/DataProcessors/amqp-async/",
     "authors": [
