@@ -82,7 +82,7 @@ class AMQPChannel
 
   /**
    * @param int $class_id
-   * $param int $method_id
+   * @param int $method_id
    * @param string $args
    */
   protected function send_method_frame(int $class_id, int $method_id, string $args = '')
