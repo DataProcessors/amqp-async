@@ -1,6 +1,7 @@
 # amqp-async #
 
-<!-- build status -->
+[![Build Status](https://img.shields.io/travis/DataProcessors/amqp-async.svg?style=flat-square)](https://travis-ci.org/DataProcessors/amqp-async)
+[![LGPL-2.1 License](https://img.shields.io/packagist/l/DataProcessors/amqp-async.svg?style=flat-square)](LICENSE)
 
 **amqp-async** is an implementation of the AMQP 0.9.1 protocol for PHP designed to work with [Icicle](https://github.com/icicleio/icicle).
 
