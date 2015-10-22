@@ -14,7 +14,7 @@
 
 The recommended way to install amqp-async is with the [Composer](http://getcomposer.org/) package manager. (See the [Composer installation guide](https://getcomposer.org/doc/00-intro.md) for information on installing and using Composer.)
 
-Run the following command to use Icicle in your project: 
+Run the following command to use the library in your project: 
 
 ```bash
 composer require DataProcessors/amqp-async
