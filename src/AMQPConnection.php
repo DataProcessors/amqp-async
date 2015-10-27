@@ -2,7 +2,7 @@
 namespace DataProcessors\AMQP;
 
 use Icicle\Coroutine\Coroutine;
-use Icicle\Socket\Client\Connector;
+use Icicle\Socket\Connector\Connector;
 use Icicle\Promise\Deferred;
 use Icicle\Promise;
 

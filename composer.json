@@ -13,8 +13,8 @@
         "php": ">=7.0",
         "ext-bcmath": "*",
         "icicleio/icicle": "^0.8",
-        "icicleio/socket": "^0.3",
-        "icicleio/stream": "^0.3"
+        "icicleio/socket": "^0.4",
+        "icicleio/stream": "^0.4"
     },
     "require-dev": {
         "phpunit/phpunit": "^4.6"
