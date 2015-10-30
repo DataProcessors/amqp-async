@@ -1,10 +1,9 @@
-# amqp-async #
+# AMQP for Icicle #
 
 [![Build Status](https://img.shields.io/travis/DataProcessors/amqp-async.svg?style=flat-square)](https://travis-ci.org/DataProcessors/amqp-async)
 [![LGPL-2.1 License](https://img.shields.io/packagist/l/DataProcessors/amqp-async.svg?style=flat-square)](LICENSE)
 
-**amqp-async** is an implementation of the AMQP 0.9.1 protocol for PHP designed to work with [Icicle](https://github.com/icicleio/icicle).
-
+This library is a component for [Icicle](https://github.com/icicleio/icicle) that provides an AMQP 0.9.1 client implementation. Like other Icicle components, this library uses [Promises](https://github.com/icicleio/icicle/wiki/Promises) and [Generators](http://www.php.net/manual/en/language.generators.overview.php) for asynchronous operations that may be used to build [Coroutines](https://github.com/icicleio/icicle/wiki/Coroutines) to make writing asynchronous code more like writing synchronous code.
 
 ##### Requirements
 
@@ -12,22 +11,21 @@
 
 ##### Installation
 
-
-The recommended way to install amqp-async is with the [Composer](http://getcomposer.org/) package manager. (See the [Composer installation guide](https://getcomposer.org/doc/00-intro.md) for information on installing and using Composer.)
+The recommended way to install is with the [Composer](http://getcomposer.org/) package manager. (See the [Composer installation guide](https://getcomposer.org/doc/00-intro.md) for information on installing and using Composer.)
 
 Run the following command to use the library in your project: 
 
 ```bash
-composer require dataprocessors/amqp-async
+composer require icicleio/amqp
 ```
 
-You can also manually edit `composer.json` to add amqp-async as a project requirement.
+You can also manually edit `composer.json` to add this library as a project requirement.
 
 ```js
 // composer.json
 {
     "require": {
-        "dataprocessors/amqp-async": "1.0.*"
+        "icicleio/amqp": "^0.1"
     }
 }
 ```
@@ -41,7 +39,7 @@ require_once "vendor/autoload.php";
 class Demo {
 
   public function go() {
-    $conn = new DataProcessors\AMQP\AMQPConnection();
+    $conn = new Icicle\AMQP\AMQPConnection();
     yield $conn->connect('127.0.0.1', 5672, 'guest', 'guest');
     $channel = yield $conn->channel();
     yield $channel->basic_consume('test', '', false, false, false, false,

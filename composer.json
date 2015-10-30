@@ -1,33 +1,34 @@
 {
-    "name": "dataprocessors/amqp-async",
+    "name": "icicleio/amqp",
     "type": "library",
-    "description": "Async AMQP 0.9.1 client for PHP designed to work with Icicle.",
+    "description": "Asynchronous AMQP 0.9.1 client for Icicle.",
     "keywords": ["rabbitmq", "message", "queue"],
-    "homepage": "https://github.com/DataProcessors/amqp-async/",
+    "homepage": "http://icicle.io",
     "authors": [
         {
-            "name" : "Data Processors"
+            "name" : "Barry Brannan",
+            "email" : "barry@dataprocessors.com.au"
         }
     ],
     "require": {
         "php": ">=7.0",
         "ext-bcmath": "*",
-        "icicleio/icicle": "^0.8",
-        "icicleio/socket": "^0.4",
-        "icicleio/stream": "^0.4"
+        "icicleio/icicle": "dev-master",
+        "icicleio/socket": "dev-master",
+        "icicleio/stream": "dev-master"
     },
     "require-dev": {
         "phpunit/phpunit": "^4.6"
     },
     "autoload": {
         "psr-4": {
-            "DataProcessors\\AMQP\\": "src"
+            "Icicle\\AMQP\\": "src"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "DataProcessors\\AMQP\\tests\\Functional\\": "tests/Functional",
-            "DataProcessors\\AMQP\\tests\\Unit\\": "tests/Unit"
+            "Icicle\\Tests\\AMQP\\Functional\\": "tests/Functional",
+            "Icicle\\Tests\\AMQP\\Unit\\": "tests/Unit"
         }
     },
     "license": "LGPL-2.1"

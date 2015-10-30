@@ -4,7 +4,7 @@ require_once "vendor/autoload.php";
 class Demo {
 
   public function go() {
-    $conn = new DataProcessors\AMQP\AMQPConnection();
+    $conn = new Icicle\AMQP\AMQPConnection();
     yield $conn->connect('127.0.0.1', 5672, 'guest', 'guest');
     $channel = yield $conn->channel();
     yield $channel->basic_consume('test', '', false, false, false, false,
