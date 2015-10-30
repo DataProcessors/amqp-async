@@ -1,0 +1,60 @@
+TODO
+====
+* The client only supports AMQPLAIN authentication at this time. For 0.9.1 should use SASL mechanism.
+
+SUPPORTED FEATURES
+==================
+All AMQP 0.9.1 methods are supported as specified by 
+http://www.amqp.org/specification/0-9-1/amqp-org-download
+
+connection.start
+connection.tune
+connection.open
+
+channel.open
+channel.flow
+channel.close
+
+exchange.declare
+exchange.delete
+exchange.bind
+exchange.unbind
+
+queue.declare
+queue.bind
+queue.unbind
+queue.purge
+queue.delete
+
+basic.qos
+basic.consume
+basic.cancel
+basic.publish
+basic.return
+basic.deliver
+basic.get
+basic.ack
+basic.reject
+basic.recover
+
+tx.select
+tx.commit
+tx.rollback
+
+DESIGN NOTES
+============
+AMQP is an inheritely asynchronous protocol: messages can be delivered to a client at any time and a client 
+may send a message to the server at any time. The basic_consume function accepts a callback function parameter
+for delivery of messages.
+
+A "pump" coroutine runs for each connection to read and dispatch awaiting promises or to deliver messages via 
+a call to the callback function. A new coroutine is NOT started for each call to the callback function because the 
+client may get overwhelmed by large numbers of messages. Instead the callback function holds up the pump loop, 
+stopping any more data from being read until the callback returns. This has a benefit of allowing "TCP back pressure" 
+to limit data being sent on connection.
+
+A consequence of this approach to callbacks is that many calls to AMQP methods made directly from the callback function
+are not possible. Calls to nethods that expect a response from the server are resolved from data received in the pump 
+loop but the pump loop is held up until the callback function returns, so the program flow cannot proceed.
+
+A properly designed client application may choose to start coroutine(s) within the callback function.
