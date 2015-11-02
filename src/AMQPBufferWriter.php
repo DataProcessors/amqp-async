@@ -1,6 +1,6 @@
 <?php
 
-namespace DataProcessors\AMQP;
+namespace Icicle\AMQP;
 
 class AMQPBufferWriter extends AbstractClient
 {
@@ -108,7 +108,7 @@ class AMQPBufferWriter extends AbstractClient
      *
      * @param $n
      * @return $this
-     * @throws \DataProcessors\AMQP\Exception\AMQPInvalidArgumentException
+     * @throws \Icicle\AMQP\Exception\AMQPInvalidArgumentException
      */
     public function write_octet($n)
     {
@@ -137,7 +137,7 @@ class AMQPBufferWriter extends AbstractClient
      *
      * @param $n
      * @return $this
-     * @throws \DataProcessors\AMQP\Exception\AMQPInvalidArgumentException
+     * @throws \Icicle\AMQP\Exception\AMQPInvalidArgumentException
      */
     public function write_short($n)
     {
@@ -275,7 +275,7 @@ class AMQPBufferWriter extends AbstractClient
      *
      * @param $s
      * @return $this
-     * @throws \DataProcessors\AMQP\Exception\AMQPInvalidArgumentException
+     * @throws \Icicle\AMQP\Exception\AMQPInvalidArgumentException
      */
     public function write_shortstr($s)
     {
@@ -323,7 +323,7 @@ class AMQPBufferWriter extends AbstractClient
      *
      * @param AMQPTable|array $d Instance of AMQPTable or PHP array WITH format hints (unlike write_array())
      * @return self
-     * @throws \DataProcessors\AMQP\Exception\AMQPInvalidArgumentException
+     * @throws \Icicle\AMQP\Exception\AMQPInvalidArgumentException
      */
     public function write_table($d)
     {

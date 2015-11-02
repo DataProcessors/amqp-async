@@ -1,5 +1,5 @@
 <?php
-namespace DataProcessors\AMQP;
+namespace Icicle\AMQP;
 
 use Icicle\Coroutine\Coroutine;
 use Icicle\Socket\Connector\Connector;
@@ -10,7 +10,7 @@ class AMQPConnection
 {
     /** @var array */
     public static $LIBRARY_PROPERTIES = array(
-        'product' => array('S', 'DP_AMQP'),
+        'product' => array('S', 'Icicle'),
         'platform' => array('S', 'PHP'),
         'version' => array('S', '1.0'),
         'information' => array('S', ''),
@@ -95,9 +95,8 @@ class AMQPConnection
      * @param string $reply_text
      * @param int $failing_class_id
      * @param int $failing_method_id
-     * @return mixed|null
      */
-    public function close(int $reply_code = 0, string $reply_text = '', int $failing_class_id = 0, int $failing_method_id = 0)
+    public function close(int $reply_code = 0, string $reply_text = '', int $failing_class_id = 0, int $failing_method_id = 0): \Generator
     {
         if (!$this->isOpen()) {
             yield null;
@@ -123,7 +122,7 @@ class AMQPConnection
     /**
      * Closes all available channels
      */
-    protected function closeChannels()
+    protected function closeChannels(): \Generator
     {
         foreach ($this->channels as $key => $channel) {
             // don't close channel 0
@@ -142,7 +141,7 @@ class AMQPConnection
     * Return true if connection is open
     *
     */
-    public function isOpen()
+    public function isOpen(): bool
     {
         return ($this->client !== null) && ($this->client->isOpen());
     }
@@ -159,7 +158,7 @@ class AMQPConnection
     * @param string $locale
     * @param int $heartbeat
     */
-    public function connect(string $host, string $port, string $user, string $password, string $vhost = '/', string $login_method = 'AMQPLAIN', string $locale = 'en_US', int $heartbeat = 0)
+    public function connect(string $host, string $port, string $user, string $password, string $vhost = '/', string $login_method = 'AMQPLAIN', string $locale = 'en_US', int $heartbeat = 0): \Generator
     {
         $this->heartbeat = $heartbeat;
         $connector = new Connector();
@@ -185,7 +184,7 @@ class AMQPConnection
     * @param string $password
     * @return string
     */
-    protected function getLoginResponse(string $user, string $password) 
+    protected function getLoginResponse(string $user, string $password): string
     {
       if ($user && $password) {
           $login_response = new AMQPBufferWriter();
@@ -207,10 +206,13 @@ class AMQPConnection
     *
     * @param array $methods
     */
-    protected function syncWaitChannel0(array $methods)
+    protected function syncWaitChannel0(array $methods): \Generator
     {
         $ch = $this->channels[0];
         list($frame_type, $channel_id, $payload) = (yield $this->waitForFrame());
+
+        //echo "[" . date('Y-m-d H:i:s') . "] Received frame on channel $channel_id [" . $this->frameInfo($frame_type, $channel_id, $payload) . "] payload size " . strlen($payload) . "\n";
+
         if ($channel_id !== 0) {
             throw new Exception\AMQPRuntimeException("Expecting frame on channel 0");
         }
@@ -220,7 +222,7 @@ class AMQPConnection
             throw new Exception\AMQPRuntimeException("Waiting for " . implode(",",$methods) . " but received [" . $this->frameInfo($frame_type, $channel_id, $payload) . "]");
         }
 
-        yield $payload;
+        return $payload;
     }
 
     /**
@@ -271,27 +273,26 @@ class AMQPConnection
      * @param int $frame_max
      * @param int $heartbeat
      */
-    protected function x_tune_ok($channel_max, $frame_max, $heartbeat)
+    protected function x_tune_ok($channel_max, $frame_max, $heartbeat): \Generator
     {
         $args = new AMQPBufferWriter();
         $args->write_short($channel_max);
         $args->write_long($frame_max);
         $args->write_short($heartbeat);
-        yield $this->send_channel_method_frame(0, 10, 31, $args->getvalue());
+        return $this->send_channel_method_frame(0, 10, 31, $args->getvalue());
     }
 
 
     /**
     * Waits for a frame from the server, skipping heartbeat frames.
     *
-    * @return array
     */
-    public function waitForFrame()
+    public function waitForFrame(): \Generator
     {
         while (true) {
             list($frame_type, $channel, $payload) = (yield $this->waitForAnyFrame());
             if (!($channel === 0 && $frame_type === 8)) // If not heartbeat frame then we are done
-                break;
+                return [$frame_type, $channel, $payload];
         }
     }
 
@@ -300,7 +301,7 @@ class AMQPConnection
     *
     * @param int $bytesToRead
     */
-    protected function readExactly(int $bytesToRead)
+    protected function readExactly(int $bytesToRead): \Generator
     {
         $data = '';
         while ($bytesToRead > 0) {
@@ -308,16 +309,15 @@ class AMQPConnection
             $bytesToRead -= strlen($chunk);
             $data .= $chunk;
         }
-        yield $data;
+        return $data;
     }
 
     /**
     * Waits for a frame from the server.
     *
-    * @return array
-    * @throws \DataProcessors\AMQP\Exception\AMQPRuntimeException
+    * @throws \Icicle\AMQP\Exception\AMQPRuntimeException
     */
-    protected function waitForAnyFrame()
+    protected function waitForAnyFrame(): \Generator
     {
         // frame_type + channel_id + size
         $data = (yield $this->readExactly(AMQPBufferReader::OCTET + AMQPBufferReader::SHORT + AMQPBufferReader::LONG));
@@ -342,7 +342,7 @@ class AMQPConnection
             ));
         }
 
-        yield [$frame_type, $channel, $payload];
+        return [$frame_type, $channel, $payload];
     }
 
     /**
@@ -351,29 +351,29 @@ class AMQPConnection
      * @param string $response
      * @param string $locale
      */
-    protected function x_start_ok($client_properties, $mechanism, $response, $locale)
+    protected function x_start_ok($client_properties, $mechanism, $response, $locale): \Generator
     {
         $args = new AMQPBufferWriter();
         $args->write_table($client_properties);
         $args->write_shortstr($mechanism);
         $args->write_longstr($response);
         $args->write_shortstr($locale);
-        yield $this->send_channel_method_frame(0, 10, 11, $args->getvalue());
+        return $this->send_channel_method_frame(0, 10, 11, $args->getvalue());
     }
 
     /**
-    * Sends a method frame
-    *
-    * @param int $channel
-    * @param int $class_id
-    * @param int $method_id
-    * @param string $args
-    */
-    public function send_channel_method_frame(int $channel, int $class_id, int $method_id, string $args)
+     * Sends a method frame
+     *
+     * @param int $channel_id
+     * @param int $class_id
+     * @param int $method_id
+     * @param string $args
+     */
+    public function send_channel_method_frame(int $channel_id, int $class_id, int $method_id, string $args): \Generator
     {
         $pkt = new AMQPBufferWriter();
         $pkt->write_octet(1);
-        $pkt->write_short($channel);
+        $pkt->write_short($channel_id);
         $pkt->write_long(strlen($args) + 4); // 4 = length of class_id and method_id
         // in payload
         $pkt->write_short($class_id);
@@ -382,11 +382,21 @@ class AMQPConnection
 
         $pkt->write_octet(0xCE);
 
-        yield $this->client->write($pkt->getvalue());
+        return $this->client->write($pkt->getvalue());
     }
 
 
-    function send_channel_content($channel_id, $class_id, $weight, $body_size, $packed_properties, $body)
+    /**
+     * Sends content (HEADER/BODY frames)
+     *
+     * @param int $channel_id
+     * @param int $class_id
+     * @param int $weight
+     * @param int $body_size
+     * @param string $packed_properties
+     * @param string $body
+     */
+    public function send_channel_content(int $channel_id, int $class_id, int $weight, int $body_size, string $packed_properties, string $body): \Generator
     {
         $w = new AMQPBufferWriter();
 
@@ -415,7 +425,7 @@ class AMQPConnection
             $w->write_octet(0xCE);
         }
 
-        yield $this->client->write($w->getvalue());
+        return $this->client->write($w->getvalue());
     }
 
 
@@ -424,13 +434,13 @@ class AMQPConnection
     * @param string $reserved1
     * @param bool $reserved2
     */
-    protected function x_open(string $vhost, string $reserved1 = '', bool $reserved2 = false)
+    protected function x_open(string $vhost, string $reserved1 = '', bool $reserved2 = false): \Generator
     {
         $args = new AMQPBufferWriter();
         $args->write_shortstr($vhost);
         $args->write_shortstr($reserved1);
         $args->write_bits(array($reserved2));
-        yield $this->send_channel_method_frame(0, 10, 40, $args->getvalue());
+        return $this->send_channel_method_frame(0, 10, 40, $args->getvalue());
     }
 
 
@@ -438,10 +448,9 @@ class AMQPConnection
      * Fetches a channel object identified by the numeric channel_id, or
      * create that object if it doesn't already exist.
      *
-     * @param string $channel_id
-     * @return AMQPChannel
+     * @param int $channel_id
      */
-    public function channel($channel_id = null)
+    public function channel(int $channel_id = null): \Generator
     {
         // garbage collect channels
         foreach ($this->channels as $i=>$channel) {
@@ -451,22 +460,22 @@ class AMQPConnection
         }
         //
         if (isset($this->channels[$channel_id])) {
-            yield $this->channels[$channel_id];
+            return $this->channels[$channel_id];
         } 
         else {
             $channel_id = $channel_id ? $channel_id : $this->get_free_channel_id();
             $ch = new AMQPChannel($this, $channel_id);
             $this->channels[$channel_id] = $ch;
             yield $ch->open();
-            yield $ch;
+            return $ch;
         }
     }
 
     /**
      * @return int
-     * @throws \DataProcessors\AMQP\Exception\AMQPRuntimeException
+     * @throws \Icicle\AMQP\Exception\AMQPRuntimeException
      */
-    protected function get_free_channel_id()
+    protected function get_free_channel_id(): int
     {
         for ($i = 1; $i <= $this->channel_max; $i++) {
             if (!isset($this->channels[$i])) {
@@ -476,14 +485,20 @@ class AMQPConnection
         throw new Exception\AMQPRuntimeException('No free channel ids');
     }
 
-    public function pump()
+    /**
+     * Processing loop
+     */
+    protected function pump(): \Generator
     {
         while ($this->isOpen()) {
             yield $this->next();
         }
     }
 
-    public function next()
+    /**
+     * Process next frame
+     */
+    protected function next(): \Generator
     {
         list($frame_type, $channel_id, $payload) = (yield $this->waitForFrame());
 

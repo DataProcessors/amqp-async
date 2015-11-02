@@ -1,8 +1,8 @@
 <?php
 
-namespace DataProcessors\AMQP\Tests\Unit\Helper\Writer;
+namespace Icicle\Tests\AMQP\Unit\Helper\Writer;
 
-use DataProcessors\AMQP\Protocol091;
+use Icicle\AMQP\Protocol091;
 
 class Protocol091Test extends \PHPUnit_Framework_TestCase
 {

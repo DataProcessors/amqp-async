@@ -1,5 +1,5 @@
 <?php
-namespace DataProcessors\AMQP;
+namespace Icicle\AMQP;
 
 class AMQPMessage {
 

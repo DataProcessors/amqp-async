@@ -41,6 +41,10 @@ tx.select
 tx.commit
 tx.rollback
 
+The following RabbitMQ-defined capabilities are set when establishing a connection:
+authentication_failure_close (the broker will send a connection.close command to the client indicating ACCESS_REFUSED as the reason)
+consumer_cancel_notify (the broker will send to the client a basic.cancel in the case of unexpected consumer cancellations)
+
 DESIGN NOTES
 ============
 AMQP is an inheritely asynchronous protocol: messages can be delivered to a client at any time and a client 

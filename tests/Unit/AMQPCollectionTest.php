@@ -1,8 +1,8 @@
 <?php
 
-namespace DataProcessors\AMQP\Tests\Unit;
+namespace Icicle\Tests\AMQP\Tests\Unit;
 
-use DataProcessors\AMQP;
+use Icicle\AMQP;
 
 class AMQPCollectionTest extends \PHPUnit_Framework_TestCase
 {
@@ -11,7 +11,7 @@ class AMQPCollectionTest extends \PHPUnit_Framework_TestCase
     {
         $t = new AMQP\AMQPTable();
 
-        $this->setExpectedException('DataProcessors\AMQP\Exception\AMQPInvalidArgumentException', 'Table key must be non-empty string up to 128 chars in length');
+        $this->setExpectedException('Icicle\AMQP\Exception\AMQPInvalidArgumentException', 'Table key must be non-empty string up to 128 chars in length');
         $t->set('', 'foo');
         $this->fail('Empty table key not detected!');
     }
@@ -23,7 +23,7 @@ class AMQPCollectionTest extends \PHPUnit_Framework_TestCase
         $t = new AMQP\AMQPTable();
         $t->set(str_repeat('a', 128), 'foo');
 
-        $this->setExpectedException('DataProcessors\AMQP\Exception\AMQPInvalidArgumentException', 'Table key must be non-empty string up to 128 chars in length');
+        $this->setExpectedException('Icicle\AMQP\Exception\AMQPInvalidArgumentException', 'Table key must be non-empty string up to 128 chars in length');
         $t->set(str_repeat('a', 129), 'bar');
         $this->fail('Excessive key length not detected!');
     }

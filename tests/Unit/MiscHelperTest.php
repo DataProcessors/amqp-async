@@ -1,8 +1,8 @@
 <?php
 
-namespace DataProcessors\AMQP\Tests\Unit\Helper\Protocol;
+namespace Icicle\Tests\AMQP\Unit\Helper\Protocol;
 
-use DataProcessors\AMQP\MiscHelper;
+use Icicle\AMQP\MiscHelper;
 
 class MiscHelperTest extends \PHPUnit_Framework_TestCase
 {

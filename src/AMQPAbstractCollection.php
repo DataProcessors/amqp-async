@@ -1,5 +1,5 @@
 <?php
-namespace DataProcessors\AMQP;
+namespace Icicle\AMQP;
 
 /**
  * Iterator implemented for transparent integration with AMQPWriter::write_[array|table]()

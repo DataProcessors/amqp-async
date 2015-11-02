@@ -1,18 +1,18 @@
 <?php
 
-namespace DataProcessors\AMQP\Tests\Unit\Channel;
+namespace Icicle\Tests\AMQP\Unit\Channel;
 
-use DataProcessors\AMQP\AMQPChannel;
+use Icicle\AMQP\AMQPChannel;
 
 class AMQPChannelTest extends \PHPUnit_Framework_TestCase
 {
     public function testCloseDoesNotEmitUndefinedPropertyWarningWhenSomeMethodsAreMocked()
     {
-        $mockChannel = $this->getMockBuilder('\DataProcessors\AMQP\AMQPChannel')
+        $mockChannel = $this->getMockBuilder('\Icicle\AMQP\AMQPChannel')
             ->setMethods(array('queue_bind'))
             ->disableOriginalConstructor()
             ->getMock();
-        /* @var $mockChannel \PhpAmqpLib\Channel\AMQPChannel */
+        /* @var $mockChannel \Icicle\AMQP\AMQPChannel */
 
         $mockChannel->close();
     }

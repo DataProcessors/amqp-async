@@ -1,6 +1,6 @@
 <?php
 
-namespace DataProcessors\AMQP;
+namespace Icicle\AMQP;
 
 class AMQPBufferReader extends AbstractClient
 {
@@ -75,7 +75,7 @@ class AMQPBufferReader extends AbstractClient
     /**
      * @param $n
      * @return string
-     * @throws \DataProcessors\AMQP\Exception\AMQPRuntimeException
+     * @throws \Icicle\AMQP\Exception\AMQPRuntimeException
      */
     protected function rawread($n)
     {
@@ -334,7 +334,7 @@ class AMQPBufferReader extends AbstractClient
      * @param int $fieldType One of AMQPAbstractCollection::T_* constants
      * @param bool $collectionsAsObjects Description
      * @return mixed
-     * @throws \DataProcessors\AMQP\Exception\AMQPInvalidArgumentException
+     * @throws \Icicle\AMQP\Exception\AMQPInvalidArgumentException
      */
     public function read_value($fieldType, $collectionsAsObjects = false)
     {
