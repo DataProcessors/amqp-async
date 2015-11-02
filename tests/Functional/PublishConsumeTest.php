@@ -24,7 +24,7 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
     }
 
 
-    public function goTestChannelFlow() 
+    /*public function goTestChannelFlow() 
     {
         $conn = new AMQPConnection();
         yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
@@ -47,7 +47,7 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
         $coroutine = new Coroutine\Coroutine($this->goTestChannelFlow());
         $coroutine->done();
         Loop\run();  
-    }
+    }*/
 
 
     public function goTestBasicReturn() 
