@@ -6,7 +6,7 @@ use Icicle\Socket\Connector\Connector;
 use Icicle\Promise\Deferred;
 use Icicle\Promise;
 
-class AMQPConnection 
+class AMQPConnection
 {
     /** @var array */
     public static $LIBRARY_PROPERTIES = array(
@@ -69,7 +69,7 @@ class AMQPConnection
     * @param int $channel_id
     * @param string $payload
     */
-    protected function frameInfo(int $frame_type, int $channel_id, string $payload) 
+    protected function frameInfo(int $frame_type, int $channel_id, string $payload)
     {
         if ($frame_type == 1) {
             if (strlen($payload) >= 4) {
@@ -185,7 +185,7 @@ class AMQPConnection
     * @param string $password
     * @return string
     */
-    protected function getLoginResponse(string $user, string $password) 
+    protected function getLoginResponse(string $user, string $password)
     {
       if ($user && $password) {
           $login_response = new AMQPBufferWriter();
@@ -362,18 +362,18 @@ class AMQPConnection
     }
 
     /**
-    * Sends a method frame
-    *
-    * @param int $channel
-    * @param int $class_id
-    * @param int $method_id
-    * @param string $args
-    */
-    public function send_channel_method_frame(int $channel, int $class_id, int $method_id, string $args)
+     * Sends a method frame
+     *
+     * @param int $channel_id
+     * @param int $class_id
+     * @param int $method_id
+     * @param string $args
+     */
+    public function send_channel_method_frame(int $channel_id, int $class_id, int $method_id, string $args)
     {
         $pkt = new AMQPBufferWriter();
         $pkt->write_octet(1);
-        $pkt->write_short($channel);
+        $pkt->write_short($channel_id);
         $pkt->write_long(strlen($args) + 4); // 4 = length of class_id and method_id
         // in payload
         $pkt->write_short($class_id);
@@ -385,7 +385,16 @@ class AMQPConnection
         yield $this->client->write($pkt->getvalue());
     }
 
-
+    /**
+     * Sends content (HEADER/BODY frames)
+     *
+     * @param int $channel_id
+     * @param int $class_id
+     * @param int $weight
+     * @param int $body_size
+     * @param string $packed_properties
+     * @param string $body
+     */
     function send_channel_content($channel_id, $class_id, $weight, $body_size, $packed_properties, $body)
     {
         $w = new AMQPBufferWriter();
@@ -438,10 +447,10 @@ class AMQPConnection
      * Fetches a channel object identified by the numeric channel_id, or
      * create that object if it doesn't already exist.
      *
-     * @param string $channel_id
+     * @param int $channel_id
      * @return AMQPChannel
      */
-    public function channel($channel_id = null)
+    public function channel(int $channel_id = null)
     {
         // garbage collect channels
         foreach ($this->channels as $i=>$channel) {
@@ -452,7 +461,7 @@ class AMQPConnection
         //
         if (isset($this->channels[$channel_id])) {
             yield $this->channels[$channel_id];
-        } 
+        }
         else {
             $channel_id = $channel_id ? $channel_id : $this->get_free_channel_id();
             $ch = new AMQPChannel($this, $channel_id);
@@ -476,6 +485,9 @@ class AMQPConnection
         throw new Exception\AMQPRuntimeException('No free channel ids');
     }
 
+    /**
+     * Processing loop
+     */
     public function pump()
     {
         while ($this->isOpen()) {
@@ -483,6 +495,9 @@ class AMQPConnection
         }
     }
 
+    /**
+     * Process next frame
+     */
     public function next()
     {
         list($frame_type, $channel_id, $payload) = (yield $this->waitForFrame());
@@ -544,5 +559,5 @@ class AMQPConnection
               throw new Exception\AMQPRuntimeException("Unexpected frame received [" . $this->frameInfo($frame_type, $channel_id, $payload) . "]");
           }
         }
-    } 
+    }
 }

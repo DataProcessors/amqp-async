@@ -18,34 +18,151 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
 
     protected $msg_body;
 
-    /**
-     * @var AMQPConnection
-     */
-    protected $conn;
-
-    /**
-     * @var AMQPChannel
-     */
-    protected $ch;
-
-
-
     public function setUp()
     {
         Loop\loop(new Loop\SelectLoop());
     }
 
 
-    public function goTestPublishConsume() 
+    /*public function goTestChannelFlow()
     {
-        $this->conn = new AMQPConnection();
-        yield $this->conn->connect(HOST, PORT, USER, PASS, VHOST);
-        $this->ch = yield $this->conn->channel();
+        $conn = new AMQPConnection();
+        yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
+        $channel = yield $conn->channel();
 
-        yield $this->ch->exchange_declare($this->exchange_name, 'direct', false, false, false);
-        list($this->queue_name, ,) = yield $this->ch->queue_declare();
+        // ensure flow status makes the round trip from server in channel.flow_ok response
+        $active = yield $channel->flow(false);
+        $this->assertEquals($active,false);
 
-        yield $this->ch->queue_bind($this->queue_name, $this->exchange_name, $this->queue_name);
+        $active = yield $channel->flow(true);
+        $this->assertEquals($active,true);
+
+        yield $channel->close();
+        yield $conn->close();
+    }
+
+
+    public function testChannelFlow()
+    {
+        $coroutine = new Coroutine\Coroutine($this->goTestChannelFlow());
+        $coroutine->done();
+        Loop\run();
+    }*/
+
+
+    public function goTestBasicReturn()
+    {
+        $conn = new AMQPConnection();
+        yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
+        $channel = yield $conn->channel();
+
+        $msg = new AMQPMessage('test');
+
+        $deferredDeliver = new Promise\Deferred();
+        $channel->set_return_listener(function($msg) use (&$deferredDeliver) {
+            $deferredDeliver->resolve();
+          });
+
+        // publish a 'mandatory' message that should get returned because it could not be routed to a queue
+        yield $channel->basic_publish($msg,'','non_existent_routing_key',true);
+
+        yield $deferredDeliver->getPromise()->timeout(5); // throws timeout exception if we didn't get a basic_return in 5 seconds
+
+        yield $channel->close();
+        yield $conn->close();
+    }
+
+
+    public function testBasicReturn()
+    {
+        $coroutine = new Coroutine\Coroutine($this->goTestBasicReturn());
+        $coroutine->done();
+        Loop\run();
+    }
+
+
+    public function goTestBasicGet()
+    {
+        $conn = new AMQPConnection();
+        yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
+        $channel = yield $conn->channel();
+
+        yield $channel->exchange_declare($this->exchange_name, 'direct', false, false, false);
+        list($this->queue_name, ,) = yield $channel->queue_declare();
+
+        yield $channel->queue_bind($this->queue_name, $this->exchange_name, $this->queue_name);
+
+        $msg = new AMQPMessage('test');
+
+        yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
+        $get_msg = yield $channel->basic_get($this->queue_name);
+        $this->assertEquals($get_msg->body, $msg->body);
+        $get_msg = yield $channel->basic_get($this->queue_name);
+        $this->assertEquals($get_msg,null); // basic_get returns empty when there are no messages in the queue
+
+        // cleanup
+        yield $channel->exchange_delete($this->exchange_name);
+        yield $channel->close();
+        yield $conn->close();
+    }
+
+
+    public function testBasicGet()
+    {
+        $coroutine = new Coroutine\Coroutine($this->goTestBasicGet());
+        $coroutine->done();
+        Loop\run();
+    }
+
+
+    public function goTestTx()
+    {
+        $conn = new AMQPConnection();
+        yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
+        $channel = yield $conn->channel();
+
+        yield $channel->exchange_declare($this->exchange_name, 'direct', false, false, false);
+        list($this->queue_name, ,) = yield $channel->queue_declare();
+
+        yield $channel->queue_bind($this->queue_name, $this->exchange_name, $this->queue_name);
+
+        $msg = new AMQPMessage('test');
+
+        yield $channel->tx_select(); // start transaction mode
+
+        yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
+        yield $channel->tx_rollback(); // rollback a message
+
+        yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
+        yield $channel->tx_commit(); // commit a message
+
+        $count = yield $channel->queue_purge($this->queue_name);
+        $this->assertEquals($count, 1); // there should only be one of the two messages in the queue when we purge
+
+        // cleanup
+        yield $channel->exchange_delete($this->exchange_name);
+        yield $channel->close();
+        yield $conn->close();
+    }
+
+    public function testTx()
+    {
+        $coroutine = new Coroutine\Coroutine($this->goTestTx());
+        $coroutine->done();
+        Loop\run();
+    }
+
+
+    public function goTestPublishConsume()
+    {
+        $conn = new AMQPConnection();
+        yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
+        $channel = yield $conn->channel();
+
+        yield $channel->exchange_declare($this->exchange_name, 'direct', false, false, false);
+        list($this->queue_name, ,) = yield $channel->queue_declare();
+
+        yield $channel->queue_bind($this->queue_name, $this->exchange_name, $this->queue_name);
         $this->msg_body = 'foo bar baz äëïöü';
 
         $msg = new AMQPMessage($this->msg_body, array(
@@ -55,11 +172,11 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
             'reply_to' => 'my_reply_to'
         ));
 
-        yield $this->ch->basic_publish($msg, $this->exchange_name, $this->queue_name);
+        yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
 
         $deferredDeliver = new Promise\Deferred();
-        
-        yield $this->ch->basic_consume(
+
+        yield $channel->basic_consume(
             $this->queue_name,
             getmypid(),
             false,
@@ -72,19 +189,53 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
         );
 
         // wait for a message then continue processing
-        $msg = yield $deferredDeliver->getPromise();
+        $msg = yield $deferredDeliver->getPromise()->timeout(5);
         yield $this->process_msg($msg);
 
         // cleanup
-        yield $this->ch->exchange_delete($this->exchange_name);
-        yield $this->ch->close();
-        yield $this->conn->close();
+        yield $channel->exchange_delete($this->exchange_name);
+        yield $channel->close();
+        $this->assertEquals($channel->isClosed(), true);
+        yield $conn->close();
     }
 
 
-    public function testPublishConsume() 
+    public function testPublishConsume()
     {
         $coroutine = new Coroutine\Coroutine($this->goTestPublishConsume());
+        $coroutine->done();
+        Loop\run();
+    }
+
+
+    public function goTestQueueUnbindDelete()
+    {
+        $conn = new AMQPConnection();
+        yield $conn->connect(HOST, PORT, USER, PASS, VHOST);
+        $channel = yield $conn->channel();
+
+        yield $channel->exchange_declare($this->exchange_name, 'direct', false, false, false);
+        list($this->queue_name, ,) = yield $channel->queue_declare();
+
+        $msg = new AMQPMessage('test');
+
+        yield $channel->queue_bind($this->queue_name, $this->exchange_name, $this->queue_name);
+        yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
+        yield $channel->queue_unbind($this->queue_name, $this->exchange_name, $this->queue_name);
+        yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
+
+        $count = yield $channel->queue_delete($this->queue_name);
+        $this->assertEquals($count,1); // there should be one published message in the queue
+
+        yield $channel->exchange_delete($this->exchange_name);
+        yield $channel->close();
+        yield $conn->close();
+    }
+
+
+    public function testQueueUnbindDelete()
+    {
+        $coroutine = new Coroutine\Coroutine($this->goTestQueueUnbindDelete());
         $coroutine->done();
         Loop\run();
     }

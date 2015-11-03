@@ -17,7 +17,7 @@
         "icicleio/stream": "^0.4"
     },
     "require-dev": {
-        "phpunit/phpunit": "^4.6"
+        "phpunit/phpunit": "^5.0"
     },
     "autoload": {
         "psr-4": {
