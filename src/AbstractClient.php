@@ -1,7 +1,6 @@
 <?php
 namespace DataProcessors\AMQP;
 
-
 class AbstractClient
 {
 

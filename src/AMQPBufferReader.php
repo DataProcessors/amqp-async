@@ -1,5 +1,4 @@
 <?php
-
 namespace DataProcessors\AMQP;
 
 class AMQPBufferReader extends AbstractClient
@@ -37,7 +36,7 @@ class AMQPBufferReader extends AbstractClient
      */
     public function __construct($str = '')
     {
-    	parent::__construct();
+        parent::__construct();
 
         $this->str = $str;
         $this->str_length = strlen($this->str);
@@ -151,7 +150,7 @@ class AMQPBufferReader extends AbstractClient
     public function read_signed_short()
     {
         $this->bitcount = $this->bits = 0;
-        list(, $res) = unpack('s', $this->correctEndianness( $this->rawread(2)));
+        list(, $res) = unpack('s', $this->correctEndianness($this->rawread(2)));
 
         return $res;
     }

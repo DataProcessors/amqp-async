@@ -57,7 +57,8 @@ class AMQPConnection
     /** @var string */
     public $locales;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->bufferReader = new AMQPBufferReader();
         $this->channels[0] = new AMQPChannel($this, 0); // Create default control channel 0
     }
@@ -78,14 +79,14 @@ class AMQPConnection
 
                 return Constants091::$FRAME_TYPES[$frame_type] . " " .
                     sprintf(
-                    '> %s: %s',
-                    $method_sig,
-                    Constants091::$GLOBAL_METHOD_NAMES[MiscHelper::methodSig($method_sig)]
-                );
+                        '> %s: %s',
+                        $method_sig,
+                        Constants091::$GLOBAL_METHOD_NAMES[MiscHelper::methodSig($method_sig)]
+                    );
             }
-        }
-        else
+        } else {
             return Constants091::$FRAME_TYPES[$frame_type];
+        }
     }
 
     /**
@@ -187,19 +188,19 @@ class AMQPConnection
     */
     protected function getLoginResponse(string $user, string $password)
     {
-      if ($user && $password) {
-          $login_response = new AMQPBufferWriter();
-          $login_response->write_table(array(
-              'LOGIN' => array('S', $user),
-              'PASSWORD' => array('S', $password)
-          ));
-          // Skip the length
-          $responseValue = $login_response->getvalue();
-          $login_response = substr($responseValue, 4, strlen($responseValue) - 4);
-      } else {
-          $login_response = null;
-      }
-      return $login_response;
+        if ($user && $password) {
+            $login_response = new AMQPBufferWriter();
+            $login_response->write_table(array(
+                'LOGIN' => array('S', $user),
+                'PASSWORD' => array('S', $password)
+            ));
+            // Skip the length
+            $responseValue = $login_response->getvalue();
+            $login_response = substr($responseValue, 4, strlen($responseValue) - 4);
+        } else {
+            $login_response = null;
+        }
+        return $login_response;
     }
 
     /**
@@ -217,7 +218,7 @@ class AMQPConnection
         $ch->add_wait($methods, null, null, null);
 
         if (!$ch->isWaitFrame($frame_type, $payload)) {
-            throw new Exception\AMQPRuntimeException("Waiting for " . implode(",",$methods) . " but received [" . $this->frameInfo($frame_type, $channel_id, $payload) . "]");
+            throw new Exception\AMQPRuntimeException("Waiting for " . implode(",", $methods) . " but received [" . $this->frameInfo($frame_type, $channel_id, $payload) . "]");
         }
 
         yield $payload;
@@ -290,8 +291,9 @@ class AMQPConnection
     {
         while (true) {
             list($frame_type, $channel, $payload) = (yield $this->waitForAnyFrame());
-            if (!($channel === 0 && $frame_type === 8)) // If not heartbeat frame then we are done
+            if (!($channel === 0 && $frame_type === 8)) { // If not heartbeat frame then we are done
                 break;
+            }
         }
     }
 
@@ -337,8 +339,8 @@ class AMQPConnection
 
         if ($ch != 0xCE) {
             throw new Exception\AMQPRuntimeException(sprintf(
-              'Framing error, unexpected byte: %x',
-              $ch
+                'Framing error, unexpected byte: %x',
+                $ch
             ));
         }
 
@@ -395,7 +397,7 @@ class AMQPConnection
      * @param string $packed_properties
      * @param string $body
      */
-    function send_channel_content($channel_id, $class_id, $weight, $body_size, $packed_properties, $body)
+    public function send_channel_content($channel_id, $class_id, $weight, $body_size, $packed_properties, $body)
     {
         $w = new AMQPBufferWriter();
 
@@ -453,7 +455,7 @@ class AMQPConnection
     public function channel(int $channel_id = null)
     {
         // garbage collect channels
-        foreach ($this->channels as $i=>$channel) {
+        foreach ($this->channels as $i => $channel) {
             if ($channel->isClosed()) {
                 unset($this->channels[$i]);
             }
@@ -461,8 +463,7 @@ class AMQPConnection
         //
         if (isset($this->channels[$channel_id])) {
             yield $this->channels[$channel_id];
-        }
-        else {
+        } else {
             $channel_id = $channel_id ? $channel_id : $this->get_free_channel_id();
             $ch = new AMQPChannel($this, $channel_id);
             $this->channels[$channel_id] = $ch;
@@ -506,9 +507,9 @@ class AMQPConnection
 
         if (!isset($this->channels[$channel_id])) {
             throw new Exception\AMQPRuntimeException("Received frame on non-existent channel number $channel_id");
-        }
-        else
+        } else {
             $ch = $this->channels[$channel_id];
+        }
 
         if (strlen($payload) < 4) {
             throw new Exception\AMQPOutOfBoundsException('Method frame too short');
@@ -521,43 +522,31 @@ class AMQPConnection
             if (!$ch->pendingClose) {
                 $ch->basic_deliver($payload);
             }
-        }
-        else
-        if ($frame_type == 2) { // FRAME-HEADER
+        } elseif ($frame_type == 2) { // FRAME-HEADER
             if (!$ch->pendingClose) {
                 $ch->frame_header($payload);
             }
-        }
-        else
-        if ($frame_type == 3) { // FRAME-BODY
+        } elseif ($frame_type == 3) { // FRAME-BODY
             if (!$ch->pendingClose) {
                 $ch->frame_body($payload);
             }
-        }
-        else
-        if (($frame_type == 1) && ($method_sig == '60,30')) { // FRAME_METHOD Basic.cancel
+        } elseif (($frame_type == 1) && ($method_sig == '60,30')) { // FRAME_METHOD Basic.cancel
             // RabbitMQ specific extension which sends a Basic.cancel to the client in some situations; enabled with consumer_cancel_notify in connect options
             // see https://www.rabbitmq.com/consumer-cancel.html
-        }
-        else
-        if (($frame_type == 1) && ($method_sig == '60,50')) { // FRAME_METHOD Basic.return
+        } elseif (($frame_type == 1) && ($method_sig == '60,50')) { // FRAME_METHOD Basic.return
             if (!$ch->pendingClose) {
                 $ch->basic_return($payload);
             }
-        }
-        else
-        if (($frame_type == 1) && ($method_sig == '20,20')) { // FRAME_METHOD Channel.flow
+        } elseif (($frame_type == 1) && ($method_sig == '20,20')) { // FRAME_METHOD Channel.flow
             if (!$ch->pendingClose) {
                 yield $ch->server_flow($payload);
             }
-        }
-        else {
-          if ($ch->isWaitFrame($frame_type, $payload)) {
-              // got the frame we were looking for
-          }
-          else {
-              throw new Exception\AMQPRuntimeException("Unexpected frame received [" . $this->frameInfo($frame_type, $channel_id, $payload) . "]");
-          }
+        } else {
+            if ($ch->isWaitFrame($frame_type, $payload)) {
+                // got the frame we were looking for
+            } else {
+                throw new Exception\AMQPRuntimeException("Unexpected frame received [" . $this->frameInfo($frame_type, $channel_id, $payload) . "]");
+            }
         }
     }
 }
