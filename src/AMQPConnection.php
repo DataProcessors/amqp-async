@@ -149,6 +149,14 @@ class AMQPConnection
     }
 
     /**
+    * Provide access to underlying socket stream resource
+    */
+    public function getResource()
+    {
+        return $this->client->getResource();
+    }
+
+    /**
     * Connect to AMQP server
     *
     * @param string $host
