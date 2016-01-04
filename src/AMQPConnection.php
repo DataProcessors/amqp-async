@@ -36,6 +36,12 @@ class AMQPConnection
     /** @var int */
     protected $heartbeat;
 
+    /** @var bool */
+    protected $something_received_between_heartbeat_checks = false;
+
+    /** @var bool */
+    protected $something_sent_between_heartbeat_checks = false;
+
     /** @var int */
     protected $channel_max = 65535;
 
@@ -185,6 +191,11 @@ class AMQPConnection
         ///
         $coroutine = new Coroutine($this->pump()); // pump needs to stay running as a coroutine, reading and dispatching messages
         $coroutine->done();
+        ///
+        if ($heartbeat > 0) {
+            (new Coroutine($this->outputHeartbeatLoop()))->done();
+            (new Coroutine($this->inputHeartbeatLoop()))->done();
+        }
     }
 
     /**
@@ -299,6 +310,7 @@ class AMQPConnection
     {
         while (true) {
             list($frame_type, $channel, $payload) = (yield $this->waitForAnyFrame());
+            $this->something_received_between_heartbeat_checks = true;
             if (!($channel === 0 && $frame_type === 8)) { // If not heartbeat frame then we are done
                 break;
             }
@@ -392,6 +404,7 @@ class AMQPConnection
 
         $pkt->write_octet(0xCE);
 
+        $this->something_sent_between_heartbeat_checks = true;
         yield $this->client->write($pkt->getvalue());
     }
 
@@ -434,6 +447,7 @@ class AMQPConnection
             $w->write_octet(0xCE);
         }
 
+        $this->something_sent_between_heartbeat_checks = true;
         yield $this->client->write($w->getvalue());
     }
 
@@ -472,7 +486,7 @@ class AMQPConnection
         if (isset($this->channels[$channel_id])) {
             yield $this->channels[$channel_id];
         } else {
-            $channel_id = $channel_id ? $channel_id : $this->get_free_channel_id();
+            $channel_id = $channel_id ? $channel_id : $this->getFreeChannelID();
             $ch = new AMQPChannel($this, $channel_id);
             $this->channels[$channel_id] = $ch;
             yield $ch->open();
@@ -484,7 +498,7 @@ class AMQPConnection
      * @return int
      * @throws \DataProcessors\AMQP\Exception\AMQPRuntimeException
      */
-    protected function get_free_channel_id()
+    protected function getFreeChannelID()
     {
         for ($i = 1; $i <= $this->channel_max; $i++) {
             if (!isset($this->channels[$i])) {
@@ -501,6 +515,41 @@ class AMQPConnection
     {
         while ($this->isOpen()) {
             yield $this->next();
+        }
+    }
+
+    /**
+     * Output heartbeat loop
+     */
+    public function outputHeartbeatLoop()
+    {
+        while ($this->isOpen()) {
+            yield Promise\resolve()->delay($this->heartbeat);
+            if (!$this->something_sent_between_heartbeat_checks) {
+                $pkt = new AMQPBufferWriter();
+                $pkt->write_octet(4);
+                $pkt->write_short(0);
+                $pkt->write_long(0);
+                $pkt->write_octet(0xCE);
+                yield $this->client->write($pkt->getvalue());
+            } else {
+                $this->something_sent_between_heartbeat_checks = false;
+            }
+        }
+    }
+
+    /**
+     * Input heartbeat loop
+     */
+    public function inputHeartbeatLoop()
+    {
+        while ($this->isOpen()) {
+            yield Promise\resolve()->delay($this->heartbeat * 2);
+            if (!$this->something_received_between_heartbeat_checks) {
+                yield $this->close();
+            } else {
+                $this->something_received_between_heartbeat_checks = false;
+            }
         }
     }
 
