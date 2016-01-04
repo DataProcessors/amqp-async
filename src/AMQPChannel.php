@@ -2,7 +2,7 @@
 namespace DataProcessors\AMQP;
 
 use Icicle\Socket\Client\Client;
-use Icicle\Promise\Deferred;
+use Icicle\Awaitable\Deferred;
 use Icicle\Coroutine\Coroutine;
 
 class AMQPChannel

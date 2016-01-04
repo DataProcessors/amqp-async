@@ -2,9 +2,9 @@
 namespace DataProcessors\AMQP;
 
 use Icicle\Coroutine\Coroutine;
-use Icicle\Socket\Connector\Connector;
-use Icicle\Promise\Deferred;
-use Icicle\Promise;
+use Icicle\Socket\Connector\DefaultConnector;
+use Icicle\Awaitable\Deferred;
+use Icicle\Awaitable;
 
 class AMQPConnection
 {
@@ -177,7 +177,7 @@ class AMQPConnection
     public function connect(string $host, string $port, string $user, string $password, string $vhost = '/', string $login_method = 'AMQPLAIN', string $locale = 'en_US', int $heartbeat = 0)
     {
         $this->heartbeat = $heartbeat;
-        $connector = new Connector();
+        $connector = new DefaultConnector();
         $this->client = (yield $connector->connect($host, $port));
         yield $this->client->write(Constants091::$AMQP_PROTOCOL_HEADER);
         $payload = (yield $this->syncWaitChannel0(array('connection.start')));
@@ -524,7 +524,7 @@ class AMQPConnection
     public function outputHeartbeatLoop()
     {
         while ($this->isOpen()) {
-            yield Promise\resolve()->delay($this->heartbeat);
+            yield Awaitable\resolve()->delay($this->heartbeat);
             if (!$this->something_sent_between_heartbeat_checks) {
                 $pkt = new AMQPBufferWriter();
                 $pkt->write_octet(4);
@@ -544,7 +544,7 @@ class AMQPConnection
     public function inputHeartbeatLoop()
     {
         while ($this->isOpen()) {
-            yield Promise\resolve()->delay($this->heartbeat * 2);
+            yield Awaitable\resolve()->delay($this->heartbeat * 2);
             if (!$this->something_received_between_heartbeat_checks) {
                 yield $this->close();
             } else {

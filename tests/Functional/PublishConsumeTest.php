@@ -7,7 +7,7 @@ use DataProcessors\AMQP\AMQPConnection;
 use DataProcessors\AMQP\AMQPMessage;
 use Icicle\Coroutine;
 use Icicle\Loop;
-use Icicle\Promise;
+use Icicle\Awaitable;
 
 class PublishConsumeTest extends \PHPUnit_Framework_TestCase
 {
@@ -58,13 +58,13 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
 
         $msg = new AMQPMessage('test');
 
-        $deferredDeliver = new Promise\Deferred();
-        $channel->set_return_listener(function($msg) use (&$deferredDeliver) {
+        $deferredDeliver = new Awaitable\Deferred();
+        $channel->set_return_listener(function ($msg) use (&$deferredDeliver) {
             $deferredDeliver->resolve();
-          });
+        });
 
         // publish a 'mandatory' message that should get returned because it could not be routed to a queue
-        yield $channel->basic_publish($msg,'','non_existent_routing_key',true);
+        yield $channel->basic_publish($msg, '', 'non_existent_routing_key', true);
 
         yield $deferredDeliver->getPromise()->timeout(5); // throws timeout exception if we didn't get a basic_return in 5 seconds
 
@@ -98,7 +98,7 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
         $get_msg = yield $channel->basic_get($this->queue_name);
         $this->assertEquals($get_msg->body, $msg->body);
         $get_msg = yield $channel->basic_get($this->queue_name);
-        $this->assertEquals($get_msg,null); // basic_get returns empty when there are no messages in the queue
+        $this->assertEquals($get_msg, null); // basic_get returns empty when there are no messages in the queue
 
         // cleanup
         yield $channel->exchange_delete($this->exchange_name);
@@ -174,7 +174,7 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
 
         yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
 
-        $deferredDeliver = new Promise\Deferred();
+        $deferredDeliver = new Awaitable\Deferred();
 
         yield $channel->basic_consume(
             $this->queue_name,
@@ -184,13 +184,13 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
             false,
             false,
             function ($msg) use ($deferredDeliver) {
-              $deferredDeliver->resolve($msg);
+                $deferredDeliver->resolve($msg);
             }
         );
 
         // wait for a message then continue processing
         $msg = yield $deferredDeliver->getPromise()->timeout(5);
-        yield $this->process_msg($msg);
+        yield $this->processMessage($msg);
 
         // cleanup
         yield $channel->exchange_delete($this->exchange_name);
@@ -225,7 +225,7 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
         yield $channel->basic_publish($msg, $this->exchange_name, $this->queue_name);
 
         $count = yield $channel->queue_delete($this->queue_name);
-        $this->assertEquals($count,1); // there should be one published message in the queue
+        $this->assertEquals($count, 1); // there should be one published message in the queue
 
         yield $channel->exchange_delete($this->exchange_name);
         yield $channel->close();
@@ -241,7 +241,7 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
     }
 
 
-    public function process_msg($msg)
+    public function processMessage($msg)
     {
         $delivery_info = $msg->delivery_info;
 
@@ -262,8 +262,8 @@ class PublishConsumeTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals('my_reply_to', $msg->get('reply_to'));
 
         try {
-          $msg->get('no_property');
-          $this->fail('OutOfBoundsException has not been raised.');
+            $msg->get('no_property');
+            $this->fail('OutOfBoundsException has not been raised.');
         } catch (\OutOfBoundsException $e) {
           // do nothing
         }
