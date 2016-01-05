@@ -4,6 +4,12 @@ namespace DataProcessors\AMQP;
 use Icicle\Socket\Client\Client;
 use Icicle\Awaitable\Deferred;
 use Icicle\Coroutine\Coroutine;
+use DataProcessors\AMQP\Constants\ClassTypes;
+use DataProcessors\AMQP\Constants\TxMethods;
+use DataProcessors\AMQP\Constants\ChannelMethods;
+use DataProcessors\AMQP\Constants\ExchangeMethods;
+use DataProcessors\AMQP\Constants\QueueMethods;
+use DataProcessors\AMQP\Constants\BasicMethods;
 
 class AMQPChannel
 {
@@ -61,10 +67,10 @@ class AMQPChannel
                 return null;
             }
 
-            list($class_id, $method_id, $args) = $this->protocolWriter->channelOpen();
-            yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+            yield $this->sendMethodFrame($this->protocolWriter->channelOpen());
+            
             $deferred = new Deferred();
-            $this->add_wait(array('channel.open_ok'), $deferred, null, null);
+            $this->add_wait([['class_id'=>ClassTypes::CHANNEL, 'method_id'=>ChannelMethods::OPEN_OK]], $deferred, null, null);
             yield $deferred->getPromise();
         } catch (\Exception $e) {
             yield $this->close();
@@ -73,13 +79,11 @@ class AMQPChannel
     }
 
     /**
-     * @param int $class_id
-     * @param int $method_id
-     * @param string $args
+     * @param array $frame
      */
-    protected function send_method_frame(int $class_id, int $method_id, string $args = '')
+    protected function sendMethodFrame(array $frame)
     {
-        yield $this->connection->send_channel_method_frame($this->channel_id, $class_id, $method_id, $args);
+        yield $this->connection->sendChannelMethodFrame($this->channel_id, $frame);
     }
 
     /**
@@ -89,11 +93,10 @@ class AMQPChannel
      */
     public function flow(bool $active)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->channelFlow($active);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->channelFlow($active));
 
         $deferred = new Deferred();
-        $this->add_wait(array('channel.flow_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::CHANNEL, 'method_id'=>ChannelMethods::FLOW_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -106,11 +109,10 @@ class AMQPChannel
      */
     public function basic_get(string $queue = '', bool $no_ack = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicGet(0, $queue, $no_ack);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->basicGet(0, $queue, $no_ack));
 
         $this->basic_get_deferred = new Deferred();
-        $this->add_wait(array('basic.get_ok','basic.get_empty'), null, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::BASIC, 'method_id'=>BasicMethods::GET_OK], ['class_id'=>ClassTypes::BASIC, 'method_id'=>BasicMethods::GET_EMPTY]], null, null, null);
         yield $this->basic_get_deferred->getPromise();
     }
 
@@ -132,8 +134,7 @@ class AMQPChannel
         bool $nowait = false,
         array $arguments = array()
     ) {
-        list($class_id, $method_id, $args) = $this->protocolWriter->exchangeDeclare(0, $exchange, $type, $passive, $durable, false, false, $nowait, $arguments);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->exchangeDeclare(0, $exchange, $type, $passive, $durable, false, false, $nowait, $arguments));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -144,7 +145,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('exchange.declare_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::EXCHANGE, 'method_id'=>ExchangeMethods::DECLARE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -157,8 +158,7 @@ class AMQPChannel
      */
     public function exchange_delete(string $exchange, bool $if_unused = false, bool $nowait = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->exchangeDelete(0, $exchange, $if_unused, $nowait);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->exchangeDelete(0, $exchange, $if_unused, $nowait));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -169,7 +169,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('exchange.delete_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::EXCHANGE, 'method_id'=>ExchangeMethods::DELETE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -184,8 +184,7 @@ class AMQPChannel
      */
     public function queue_bind(string $queue, string $exchange, string $routing_key = '', bool $nowait = false, array $arguments = array())
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->queueBind(0, $queue, $exchange, $routing_key, $nowait, $arguments);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->queueBind(0, $queue, $exchange, $routing_key, $nowait, $arguments));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -196,7 +195,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('queue.bind_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::QUEUE, 'method_id'=>QueueMethods::BIND_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -210,11 +209,10 @@ class AMQPChannel
      */
     public function queue_unbind(string $queue, string $exchange, string $routing_key = '', array $arguments = array())
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->queueUnbind(0, $queue, $exchange, $routing_key, $arguments);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->queueUnbind(0, $queue, $exchange, $routing_key, $arguments));
 
         $deferred = new Deferred();
-        $this->add_wait(array('queue.unbind_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::QUEUE, 'method_id'=>QueueMethods::UNBIND_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -238,17 +236,7 @@ class AMQPChannel
         bool $nowait = false,
         array $arguments = array()
     ) {
-        list($class_id, $method_id, $args) = $this->protocolWriter->queueDeclare(
-            0,
-            $queue,
-            $passive,
-            $durable,
-            $exclusive,
-            $auto_delete,
-            $nowait,
-            $arguments
-        );
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->queueDeclare(0, $queue, $passive, $durable, $exclusive, $auto_delete, $nowait, $arguments));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -259,7 +247,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('queue.declare_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::QUEUE, 'method_id'=>QueueMethods::DECLARE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -273,8 +261,7 @@ class AMQPChannel
      */
     public function queue_delete(string $queue = '', bool $if_unused = false, bool $if_empty = false, bool $nowait = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->queueDelete(0, $queue, $if_unused, $if_empty, $nowait);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->queueDelete(0, $queue, $if_unused, $if_empty, $nowait));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -285,7 +272,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('queue.delete_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::QUEUE, 'method_id'=>QueueMethods::DELETE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -297,8 +284,7 @@ class AMQPChannel
      */
     public function queue_purge(string $queue = '', bool $nowait = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->queuePurge(0, $queue, $nowait);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->queuePurge(0, $queue, $nowait));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -309,7 +295,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('queue.purge_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::QUEUE, 'method_id'=>QueueMethods::PURGE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -318,9 +304,9 @@ class AMQPChannel
      */
     public function tx_select()
     {
-        yield $this->send_method_frame(90, 10);
+        yield $this->sendMethodFrame($this->protocolWriter->txSelect());
         $deferred = new Deferred();
-        $this->add_wait(array('tx.select_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::TX, 'method_id'=>TxMethods::SELECT_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -329,9 +315,9 @@ class AMQPChannel
      */
     public function tx_commit()
     {
-        yield $this->send_method_frame(90, 20);
+        yield $this->sendMethodFrame($this->protocolWriter->txCommit());
         $deferred = new Deferred();
-        $this->add_wait(array('tx.commit_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::TX, 'method_id'=>TxMethods::COMMIT_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -340,9 +326,9 @@ class AMQPChannel
      */
     public function tx_rollback()
     {
-        yield $this->send_method_frame(90, 30);
+        yield $this->sendMethodFrame($this->protocolWriter->txRollback());
         $deferred = new Deferred();
-        $this->add_wait(array('tx.rollback_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::TX, 'method_id'=>TxMethods::ROLLBACK_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -357,7 +343,6 @@ class AMQPChannel
      * @param bool $nowait
      * @param callback|null $callback
      * @param array $arguments
-     * @return mixed|string
      */
     public function basic_consume(
         string $queue = '',
@@ -369,18 +354,7 @@ class AMQPChannel
         callable $callback = null,
         array $arguments = array()
     ) {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicConsume(
-            0,
-            $queue,
-            $consumer_tag,
-            $no_local,
-            $no_ack,
-            $exclusive,
-            $nowait,
-            $arguments
-        );
-
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->basicConsume(0, $queue, $consumer_tag, $no_local, $no_ack, $exclusive, $nowait, $arguments));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -395,7 +369,7 @@ class AMQPChannel
             yield $consumer_tag;
         } else {
             $deferred = new Deferred();
-            $this->add_wait(array('basic.consume_ok'), $deferred, $consumer_tag, $callback);
+            $this->add_wait([['class_id'=>ClassTypes::BASIC, 'method_id'=>BasicMethods::CONSUME_OK]], $deferred, $consumer_tag, $callback);
             yield $deferred->getPromise();
         }
     }
@@ -405,12 +379,10 @@ class AMQPChannel
      *
      * @param string $consumer_tag
      * @param bool $nowait
-     * @return mixed
      */
     public function basic_cancel(string $consumer_tag, bool $nowait = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicCancel($consumer_tag, $nowait);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->basicCancel($consumer_tag, $nowait));
 
         if ($nowait) {
             /* no-wait: [do not send reply method] If set, the server will not respond to the method. The
@@ -421,7 +393,7 @@ class AMQPChannel
         }
 
         $deferred = new Deferred();
-        $this->add_wait(array('basic.cancel_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::BASIC, 'method_id'=>BasicMethods::CANCEL_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -434,8 +406,7 @@ class AMQPChannel
      */
     public function basic_ack(string $delivery_tag, bool $multiple = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicAck($delivery_tag, $multiple);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->basicAck($delivery_tag, $multiple));
     }
 
     /**
@@ -446,8 +417,7 @@ class AMQPChannel
      */
     public function basic_reject(string $delivery_tag, bool $requeue)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicReject($delivery_tag, $requeue);
-        yield $this->send_method_frame($class_id, $method_id, $args);
+        yield $this->sendMethodFrame($this->protocolWriter->basicReject($delivery_tag, $requeue));
     }
 
     /**
@@ -457,34 +427,26 @@ class AMQPChannel
      * @param string $reply_text
      * @param int $class_id
      * @param int $method_id
-     * @return mixed
      */
     public function close(int $reply_code = 0, string $reply_text = '', int $class_id = 0, int $method_id = 0)
     {
         if ($this->is_open !== true || null === $this->connection) {
-            $this->do_close();
+            $this->doClose();
             return; // already closed
         }
-        list($x_class_id, $x_method_id, $args) = $this->protocolWriter->channelClose(
-            $reply_code,
-            $reply_text,
-            $class_id,
-            $method_id
-        );
-
-        yield $this->send_method_frame($x_class_id, $x_method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->channelClose($reply_code, $reply_text, $class_id, $method_id));
 
         $this->pendingClose = true;
 
         $deferred = new Deferred();
-        $this->add_wait(array('channel.close_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::CHANNEL, 'method_id'=>ChannelMethods::CLOSE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
     /**
      * Tear down this object, after we've agreed to close with the server.
      */
-    protected function do_close()
+    protected function doClose()
     {
         $this->channel_id = null;
         $this->connection = null;
@@ -512,16 +474,8 @@ class AMQPChannel
         bool $mandatory = false,
         bool $immediate = false
     ) {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicPublish(
-            0,
-            $exchange,
-            $routing_key,
-            $mandatory,
-            $immediate
-        );
-
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
-        yield $this->connection->send_channel_content(
+        yield $this->sendMethodFrame($this->protocolWriter->basicPublish(0, $exchange, $routing_key, $mandatory, $immediate));
+        yield $this->connection->sendChannelContent(
             $this->channel_id,
             60,
             0,
@@ -541,10 +495,10 @@ class AMQPChannel
     */
     public function basic_qos(int $prefetch_size, int $prefetch_count, bool $a_global)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicQos($prefetch_size, $prefetch_count, $a_global);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->basicQos($prefetch_size, $prefetch_count, $a_global));
+
         $deferred = new Deferred();
-        $this->add_wait(array('basic.qos_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::BASIC, 'method_id'=>BasicMethods::QOS_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -555,10 +509,10 @@ class AMQPChannel
      */
     public function basic_recover(bool $requeue = false)
     {
-        list($class_id, $method_id, $args) = $this->protocolWriter->basicRecover($requeue);
-        yield $this->send_method_frame($class_id, $method_id, $args->getvalue());
+        yield $this->sendMethodFrame($this->protocolWriter->basicRecover($requeue));
+
         $deferred = new Deferred();
-        $this->add_wait(array('basic.recover_ok'), $deferred, null, null);
+        $this->add_wait([['class_id'=>ClassTypes::BASIC, 'method_id'=>BasicMethods::RECOVER_OK]], $deferred, null, null);
         yield $deferred->getPromise();
     }
 
@@ -616,34 +570,31 @@ class AMQPChannel
 
         if (count($this->waitQueue) > 0) {
             $looking_for_methods = $this->waitQueue[0]['methods'];
-            $method_sig_array = unpack('n2', substr($payload, 0, 4));
-            $method_sig = $method_sig_array[1] . ',' . $method_sig_array[2];
-
-            //echo "isWaitFrame looking for " . implode(",",$looking_for_methods) . " got " . Constants091::$GLOBAL_METHOD_NAMES[MiscHelper::methodSig($method_sig)] . "\n";
+            list(, $class_id, $method_id) = unpack('n2', substr($payload, 0, 4));
 
             foreach ($looking_for_methods as $looking_for_method) {
-                if ($method_sig == Constants091::$GLOBAL_METHOD_SIGS[$looking_for_method]) {
-                    if ($looking_for_method == 'basic.consume_ok') {
+                if (($class_id == $looking_for_method['class_id']) && ($method_id == $looking_for_method['method_id'])) {
+                    if (($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::CONSUME_OK)) {
                         $this->basic_consume_ok($payload);
-                    } elseif ($looking_for_method == 'queue.declare_ok') {
+                    } elseif (($class_id == ClassTypes::QUEUE) && ($method_id == QueueMethods::DECLARE_OK)) {
                         $this->queue_declare_ok($payload);
-                    } elseif ($looking_for_method == 'channel.flow_ok') {
+                    } elseif (($class_id == ClassTypes::CHANNEL) && ($method_id == ChannelMethods::FLOW_OK)) {
                         $this->channel_flow_ok($payload);
-                    } elseif ($looking_for_method == 'queue.purge_ok') {
+                    } elseif (($class_id == ClassTypes::QUEUE) && ($method_id == QueueMethods::PURGE_OK)) {
                         $this->queue_purge_ok($payload);
-                    } elseif ($looking_for_method == 'queue.delete_ok') {
+                    } elseif (($class_id == ClassTypes::QUEUE) && ($method_id == QueueMethods::DELETE_OK)) {
                         $this->queue_delete_ok($payload);
                     } else {
-                        if ($looking_for_method == 'channel.open_ok') {
+                        if (($class_id == ClassTypes::CHANNEL) && ($method_id == ChannelMethods::OPEN_OK)) {
                             $this->is_open = true;
-                        } elseif ($looking_for_method == 'channel.close_ok') {
-                            $this->do_close();
-                        } elseif ($looking_for_method == 'basic.get_ok') {
-                            $this->basic_get_ok($payload);
-                        } elseif ($looking_for_method == 'basic.cancel_ok') {
-                            $this->basic_cancel_ok($payload);
-                        } elseif ($looking_for_method == 'basic.get_empty') {
-                            $this->basic_get_empty($payload);
+                        } elseif (($class_id == ClassTypes::CHANNEL) && ($method_id == ChannelMethods::CLOSE_OK)) {
+                            $this->doClose();
+                        } elseif (($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::GET_OK)) {
+                            $this->basicGetOk($payload);
+                        } elseif (($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::CANCEL_OK)) {
+                            $this->basicCancelOk($payload);
+                        } elseif (($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::GET_EMPTY)) {
+                            $this->basicGetEmpty($payload);
                         }
                         //do nothing for: exchange.declare_ok, exchange.delete_ok, queue.bind_ok, queue.unbind_ok, tx.select_ok, tx.commit_ok, tx.rollback_ok, basic.qos_ok, basic.recover_ok
                         //
@@ -743,7 +694,7 @@ class AMQPChannel
      *
      * @param string payload
      */
-    protected function basic_cancel_ok(string $payload)
+    protected function basicCancelOk(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $bufferReader = new AMQPBufferReader($args);
@@ -771,7 +722,7 @@ class AMQPChannel
      *
      * @param string payload
      */
-    public function server_flow(string $payload)
+    public function serverFlow(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $bufferReader = new AMQPBufferReader($args);
@@ -779,9 +730,7 @@ class AMQPChannel
         if (isset($this->callbacks['__channel_flow'])) {
             $this->callbacks['__channel_flow']($active);
             //
-            $args = new AMQPBufferWriter();
-            $args->write_bits(array($active));
-            yield $this->send_method_frame(20, 21, $args->getvalue()); // send channel.flow_ok response
+            yield $this->sendMethodFrame($this->protocolWriter->channelFlowOk($active));
         }
     }
 
@@ -790,7 +739,7 @@ class AMQPChannel
      *
      * @param string payload
      */
-    public function basic_deliver(string $payload)
+    public function basicDeliver(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $this->bufferReader->reuse($args);
@@ -806,13 +755,12 @@ class AMQPChannel
         );
     }
 
-
     /**
      * Returns a failed message
      *
      * @param string payload
      */
-    public function basic_return(string $payload)
+    public function basicReturn(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $this->bufferReader->reuse($args);
@@ -832,7 +780,7 @@ class AMQPChannel
      *
      * @param string payload
      */
-    public function basic_get_ok(string $payload)
+    protected function basicGetOk(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $this->bufferReader->reuse($args);
@@ -853,7 +801,7 @@ class AMQPChannel
      *
      * @param string payload
      */
-    public function basic_get_empty(string $payload)
+    protected function basicGetEmpty(string $payload)
     {
         unset($this->pendingBasicGet);
         if (isset($this->basic_get_deferred)) {
@@ -868,7 +816,7 @@ class AMQPChannel
      * @param string payload
      * @throws Exception\AMQPRuntimeException if we weren't expecting the frame header
      */
-    public function frame_header(string $payload)
+    public function frameHeader(string $payload)
     {
         if (isset($this->pendingBasicDeliver)) {
             $msg = $this->pendingBasicDeliver;
@@ -895,7 +843,7 @@ class AMQPChannel
      * @param string payload
      * @throws Exception\AMQPRuntimeException if we weren't expecting the frame body
      */
-    public function frame_body(string $payload)
+    public function frameBody(string $payload)
     {
         if (isset($this->pendingBasicDeliver)) {
             $msg = $this->pendingBasicDeliver;

@@ -5,6 +5,12 @@ use Icicle\Coroutine\Coroutine;
 use Icicle\Socket\Connector\DefaultConnector;
 use Icicle\Awaitable\Deferred;
 use Icicle\Awaitable;
+use DataProcessors\AMQP\Constants\Constants091;
+use DataProcessors\AMQP\Constants\ClassTypes;
+use DataProcessors\AMQP\Constants\FrameTypes;
+use DataProcessors\AMQP\Constants\ConnectionMethods;
+use DataProcessors\AMQP\Constants\ChannelMethods;
+use DataProcessors\AMQP\Constants\BasicMethods;
 
 class AMQPConnection
 {
@@ -32,6 +38,9 @@ class AMQPConnection
 
     /** @var AMQPBufferReader */
     protected $bufferReader;
+
+    /** @var Protocol091 */
+    protected $protocolWriter;
 
     /** @var int */
     protected $heartbeat;
@@ -66,6 +75,7 @@ class AMQPConnection
     public function __construct()
     {
         $this->bufferReader = new AMQPBufferReader();
+        $this->protocolWriter = new Protocol091();
         $this->channels[0] = new AMQPChannel($this, 0); // Create default control channel 0
     }
 
@@ -78,7 +88,7 @@ class AMQPConnection
     */
     protected function frameInfo(int $frame_type, int $channel_id, string $payload)
     {
-        if ($frame_type == 1) {
+        if ($frame_type == FrameTypes::METHOD) {
             if (strlen($payload) >= 4) {
                 $method_sig_array = unpack('n2', substr($payload, 0, 4));
                 $method_sig = $method_sig_array[1] . ',' . $method_sig_array[2];
@@ -113,16 +123,10 @@ class AMQPConnection
 
         yield $this->closeChannels();
 
-        $args = new AMQPBufferWriter();
-        $args->write_short($reply_code);
-        $args->write_shortstr($reply_text);
-        $args->write_short($failing_class_id);
-        $args->write_short($failing_method_id);
-
-        yield $this->send_channel_method_frame(0, 10, 50, $args->getvalue());
+        yield $this->sendChannelMethodFrame(0, $this->protocolWriter->connectionClose($reply_code, $reply_text, $failing_class_id, $failing_method_id));
 
         $deferred = new Deferred();
-        $this->channels[0]->add_wait(array('connection.close_ok'), $deferred, null, null);
+        $this->channels[0]->add_wait([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::CLOSE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
         yield $this->client->close();
     }
@@ -179,15 +183,15 @@ class AMQPConnection
         $this->heartbeat = $heartbeat;
         $connector = new DefaultConnector();
         $this->client = (yield $connector->connect($host, $port));
-        yield $this->client->write(Constants091::$AMQP_PROTOCOL_HEADER);
-        $payload = (yield $this->syncWaitChannel0(array('connection.start')));
-        $this->connection_start($payload);
-        yield $this->x_start_ok(self::$LIBRARY_PROPERTIES, $login_method, $this->getLoginResponse($user, $password), $locale);
-        $payload = (yield $this->syncWaitChannel0(array('connection.tune')));
-        $this->connection_tune($payload);
-        yield $this->x_tune_ok($this->channel_max, $this->frame_max, $this->heartbeat);
-        yield $this->x_open($vhost);
-        yield $this->syncWaitChannel0(array('connection.open_ok'));
+        yield $this->client->write(Constants091::AMQP_PROTOCOL_HEADER);
+        $payload = (yield $this->syncWaitChannel0([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::START]]));
+        $this->connectionStart($payload);
+        yield $this->startOk(self::$LIBRARY_PROPERTIES, $login_method, $this->getLoginResponse($user, $password), $locale);
+        $payload = (yield $this->syncWaitChannel0([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::TUNE]]));
+        $this->connectionTune($payload);
+        yield $this->tuneOk($this->channel_max, $this->frame_max, $this->heartbeat);
+        yield $this->open($vhost);
+        yield $this->syncWaitChannel0([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::OPEN_OK]]);
         ///
         $coroutine = new Coroutine($this->pump()); // pump needs to stay running as a coroutine, reading and dispatching messages
         $coroutine->done();
@@ -248,7 +252,7 @@ class AMQPConnection
     *
     * @param string $payload
     */
-    protected function connection_start(string $payload)
+    protected function connectionStart(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $this->bufferReader->reuse($args);
@@ -264,7 +268,7 @@ class AMQPConnection
     *
     * @param string $payload
     */
-    protected function connection_tune(string $payload)
+    protected function connectionTune(string $payload)
     {
         $args = substr($payload, 4, strlen($payload) - 4);
         $this->bufferReader->reuse($args);
@@ -291,13 +295,9 @@ class AMQPConnection
      * @param int $frame_max
      * @param int $heartbeat
      */
-    protected function x_tune_ok($channel_max, $frame_max, $heartbeat)
+    protected function tuneOk(int $channel_max, int $frame_max, int $heartbeat)
     {
-        $args = new AMQPBufferWriter();
-        $args->write_short($channel_max);
-        $args->write_long($frame_max);
-        $args->write_short($heartbeat);
-        yield $this->send_channel_method_frame(0, 10, 31, $args->getvalue());
+        yield $this->sendChannelMethodFrame(0, $this->protocolWriter->connectionTuneOk($channel_max, $frame_max, $heartbeat));
     }
 
 
@@ -311,7 +311,7 @@ class AMQPConnection
         while (true) {
             list($frame_type, $channel, $payload) = (yield $this->waitForAnyFrame());
             $this->something_received_between_heartbeat_checks = true;
-            if (!($channel === 0 && $frame_type === 8)) { // If not heartbeat frame then we are done
+            if (!($channel === 0 && $frame_type === FrameTypes::HEARTBEAT)) { // If not heartbeat frame then we are done
                 break;
             }
         }
@@ -357,7 +357,7 @@ class AMQPConnection
         $payload = $this->bufferReader->read($size);
         $ch = $this->bufferReader->read_octet();
 
-        if ($ch != 0xCE) {
+        if ($ch != Constants091::FRAME_END) {
             throw new Exception\AMQPRuntimeException(sprintf(
                 'Framing error, unexpected byte: %x',
                 $ch
@@ -373,36 +373,29 @@ class AMQPConnection
      * @param string $response
      * @param string $locale
      */
-    protected function x_start_ok($client_properties, $mechanism, $response, $locale)
+    protected function startOk(array $client_properties, string $mechanism, string $response, string $locale)
     {
-        $args = new AMQPBufferWriter();
-        $args->write_table($client_properties);
-        $args->write_shortstr($mechanism);
-        $args->write_longstr($response);
-        $args->write_shortstr($locale);
-        yield $this->send_channel_method_frame(0, 10, 11, $args->getvalue());
+        yield $this->sendChannelMethodFrame(0, $this->protocolWriter->connectionStartOk($client_properties, $mechanism, $response, $locale));
     }
 
     /**
      * Sends a method frame
      *
      * @param int $channel_id
-     * @param int $class_id
-     * @param int $method_id
-     * @param string $args
+     * @param array $frame
      */
-    public function send_channel_method_frame(int $channel_id, int $class_id, int $method_id, string $args)
+    public function sendChannelMethodFrame(int $channel_id, array $frame)
     {
         $pkt = new AMQPBufferWriter();
         $pkt->write_octet(1);
         $pkt->write_short($channel_id);
-        $pkt->write_long(strlen($args) + 4); // 4 = length of class_id and method_id
+        $pkt->write_long(strlen($frame[2]) + 4); // payload-size = length of args + length of class_id + length of method_id
         // in payload
-        $pkt->write_short($class_id);
-        $pkt->write_short($method_id);
-        $pkt->write($args);
+        $pkt->write_short($frame[0]); // class_id
+        $pkt->write_short($frame[1]); // method_id
+        $pkt->write($frame[2]); // args
 
-        $pkt->write_octet(0xCE);
+        $pkt->write_octet(Constants091::FRAME_END);
 
         $this->something_sent_between_heartbeat_checks = true;
         yield $this->client->write($pkt->getvalue());
@@ -418,7 +411,7 @@ class AMQPConnection
      * @param string $packed_properties
      * @param string $body
      */
-    public function send_channel_content($channel_id, $class_id, $weight, $body_size, $packed_properties, $body)
+    public function sendChannelContent(int $channel_id, int $class_id, int $weight, int $body_size, string $packed_properties, string $body)
     {
         $w = new AMQPBufferWriter();
 
@@ -430,7 +423,7 @@ class AMQPConnection
         $w->write_short($weight);
         $w->write_longlong($body_size);
         $w->write($packed_properties);
-        $w->write_octet(0xCE);
+        $w->write_octet(Constants091::FRAME_END);
 
         /// BODY ///
         $position = 0;
@@ -444,28 +437,22 @@ class AMQPConnection
 
             $w->write($payload);
 
-            $w->write_octet(0xCE);
+            $w->write_octet(Constants091::FRAME_END);
         }
 
         $this->something_sent_between_heartbeat_checks = true;
         yield $this->client->write($w->getvalue());
     }
 
-
     /**
     * @param string $vhost
     * @param string $reserved1
     * @param bool $reserved2
     */
-    protected function x_open(string $vhost, string $reserved1 = '', bool $reserved2 = false)
+    protected function open(string $vhost, string $reserved1 = '', bool $reserved2 = false)
     {
-        $args = new AMQPBufferWriter();
-        $args->write_shortstr($vhost);
-        $args->write_shortstr($reserved1);
-        $args->write_bits(array($reserved2));
-        yield $this->send_channel_method_frame(0, 10, 40, $args->getvalue());
+        yield $this->sendChannelMethodFrame(0, $this->protocolWriter->connectionOpen($vhost, $reserved1, $reserved2));
     }
-
 
     /**
      * Fetches a channel object identified by the numeric channel_id, or
@@ -527,10 +514,10 @@ class AMQPConnection
             yield Awaitable\resolve()->delay($this->heartbeat);
             if (!$this->something_sent_between_heartbeat_checks) {
                 $pkt = new AMQPBufferWriter();
-                $pkt->write_octet(4);
+                $pkt->write_octet(FrameTypes::HEARTBEAT);
                 $pkt->write_short(0);
                 $pkt->write_long(0);
-                $pkt->write_octet(0xCE);
+                $pkt->write_octet(Constants091::FRAME_END);
                 yield $this->client->write($pkt->getvalue());
             } else {
                 $this->something_sent_between_heartbeat_checks = false;
@@ -572,31 +559,30 @@ class AMQPConnection
             throw new Exception\AMQPOutOfBoundsException('Method frame too short');
         }
 
-        $method_sig_array = unpack('n2', substr($payload, 0, 4));
-        $method_sig = $method_sig_array[1] . ',' . $method_sig_array[2];
+        list(, $class_id, $method_id) = unpack('n2', substr($payload, 0, 4));
 
-        if (($frame_type == 1) && ($method_sig == '60,60')) { // FRAME_METHOD Basic.deliver
+        if (($frame_type == FrameTypes::METHOD) && ($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::DELIVER)) {
             if (!$ch->pendingClose) {
-                $ch->basic_deliver($payload);
+                $ch->basicDeliver($payload);
             }
-        } elseif ($frame_type == 2) { // FRAME-HEADER
+        } elseif ($frame_type == FrameTypes::HEADER) {
             if (!$ch->pendingClose) {
-                $ch->frame_header($payload);
+                $ch->frameHeader($payload);
             }
-        } elseif ($frame_type == 3) { // FRAME-BODY
+        } elseif ($frame_type == FrameTypes::BODY) {
             if (!$ch->pendingClose) {
-                $ch->frame_body($payload);
+                $ch->frameBody($payload);
             }
-        } elseif (($frame_type == 1) && ($method_sig == '60,30')) { // FRAME_METHOD Basic.cancel
+        } elseif (($frame_type == FrameTypes::METHOD) && ($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::CANCEL)) {
             // RabbitMQ specific extension which sends a Basic.cancel to the client in some situations; enabled with consumer_cancel_notify in connect options
             // see https://www.rabbitmq.com/consumer-cancel.html
-        } elseif (($frame_type == 1) && ($method_sig == '60,50')) { // FRAME_METHOD Basic.return
+        } elseif (($frame_type == FrameTypes::METHOD) && ($class_id == ClassTypes::BASIC) && ($method_id == BasicMethods::RETURN)) {
             if (!$ch->pendingClose) {
-                $ch->basic_return($payload);
+                $ch->basicReturn($payload);
             }
-        } elseif (($frame_type == 1) && ($method_sig == '20,20')) { // FRAME_METHOD Channel.flow
+        } elseif (($frame_type == FrameTypes::METHOD) && ($class_id == ClassTypes::CHANNEL) && ($method_id == ChannelMethods::FLOW)) {
             if (!$ch->pendingClose) {
-                yield $ch->server_flow($payload);
+                yield $ch->serverFlow($payload);
             }
         } else {
             if ($ch->isWaitFrame($frame_type, $payload)) {

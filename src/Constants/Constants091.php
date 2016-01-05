@@ -1,11 +1,11 @@
 <?php
-namespace DataProcessors\AMQP;
+namespace DataProcessors\AMQP\Constants;
 
 class Constants091
 {
-
-    public static $AMQP_PROTOCOL_HEADER = "AMQP\x00\x00\x09\x01";
-
+    const AMQP_PROTOCOL_HEADER = "AMQP\x00\x00\x09\x01";
+    const FRAME_END = 0xCE;
+    
     public static $FRAME_TYPES = array(
         1 => 'FRAME-METHOD',
         2 => 'FRAME-HEADER',
