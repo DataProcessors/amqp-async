@@ -43,7 +43,7 @@ class AMQPConnection
     protected $protocolWriter;
 
     /** @var int */
-    protected $heartbeat;
+    protected $heartbeat = null;
 
     /** @var bool */
     protected $something_received_between_heartbeat_checks = false;
@@ -178,7 +178,7 @@ class AMQPConnection
     * @param string $locale
     * @param int $heartbeat
     */
-    public function connect(string $host, string $port, string $user, string $password, string $vhost = '/', string $login_method = 'AMQPLAIN', string $locale = 'en_US', int $heartbeat = 0)
+    public function connect(string $host, string $port, string $user, string $password, string $vhost = '/', string $login_method = 'AMQPLAIN', string $locale = 'en_US', int $heartbeat = null)
     {
         $this->heartbeat = $heartbeat;
         $connector = new DefaultConnector();
@@ -297,7 +297,7 @@ class AMQPConnection
      */
     protected function tuneOk(int $channel_max, int $frame_max, int $heartbeat)
     {
-        yield $this->sendChannelMethodFrame(0, $this->protocolWriter->connectionTuneOk($channel_max, $frame_max, $heartbeat));
+        yield $this->sendChannelMethodFrame(0, $this->protocolWriter->connectionTuneOk($channel_max, $frame_max, ($heartbeat === null ? 0 : $heartbeat)));
     }
 
 
