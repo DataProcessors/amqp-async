@@ -196,7 +196,7 @@ class AMQPConnection
         $coroutine = new Coroutine($this->pump()); // pump needs to stay running as a coroutine, reading and dispatching messages
         $coroutine->done();
         ///
-        if ($heartbeat > 0) {
+        if ($this->heartbeat > 0) {
             (new Coroutine($this->outputHeartbeatLoop()))->done();
             (new Coroutine($this->inputHeartbeatLoop()))->done();
         }
