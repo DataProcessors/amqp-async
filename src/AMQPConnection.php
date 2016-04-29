@@ -5,6 +5,7 @@ use Icicle\Coroutine\Coroutine;
 use Icicle\Socket\Connector\DefaultConnector;
 use Icicle\Awaitable\Deferred;
 use Icicle\Awaitable;
+use Icicle\Loop;
 use DataProcessors\AMQP\Constants\Constants091;
 use DataProcessors\AMQP\Constants\ClassTypes;
 use DataProcessors\AMQP\Constants\FrameTypes;
@@ -44,6 +45,12 @@ class AMQPConnection
 
     /** @var int */
     protected $heartbeat = null;
+
+    /** @var Coroutine */
+    protected $inputHeartbeatCoroutine = null;
+
+    /** @var Coroutine */
+    protected $outputHeartbeatCoroutine = null;
 
     /** @var bool */
     protected $something_received_between_heartbeat_checks = false;
@@ -119,6 +126,15 @@ class AMQPConnection
         if (!$this->isOpen()) {
             yield null;
             return;
+        }
+
+        if ($this->outputHeartbeatCoroutine) {
+            $this->outputHeartbeatCoroutine->cancel();
+            $this->outputHeartbeatCoroutine = null;
+        }
+        if ($this->inputHeartbeatCoroutine) {
+            $this->inputHeartbeatCoroutine->cancel();
+            $this->inputHeartbeatCoroutine = null;
         }
 
         yield $this->closeChannels();
@@ -197,8 +213,8 @@ class AMQPConnection
         $coroutine->done();
         ///
         if ($this->heartbeat > 0) {
-            (new Coroutine($this->outputHeartbeatLoop()))->done();
-            (new Coroutine($this->inputHeartbeatLoop()))->done();
+            $this->outputHeartbeatCoroutine = new Coroutine($this->outputHeartbeatLoop());
+            $this->inputHeartbeatCoroutine = new Coroutine($this->inputHeartbeatLoop());
         }
     }
 
@@ -532,6 +548,7 @@ class AMQPConnection
     {
         while ($this->isOpen()) {
             yield Awaitable\resolve()->delay($this->heartbeat * 2);
+
             if (!$this->something_received_between_heartbeat_checks) {
                 yield $this->close();
             } else {
