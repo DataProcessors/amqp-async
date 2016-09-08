@@ -87,7 +87,7 @@ class AMQPMessage
         $this->properties[$name] = $value;
     }
 
-    public function load_properties(AMQPBufferReader $r)
+    public function loadProperties(AMQPBufferReader $r)
     {
         // Read 16-bit shorts until we get one with a low bit set to zero
         $flags = array();
@@ -126,45 +126,48 @@ class AMQPMessage
      * @return string
      * @todo Inject the AMQPWriter to make the method easier to test
      */
-    public function serialize_properties()
+    public function serializeProperties()
     {
-        $shift = 15;
-        $flag_bits = 0;
-        $flags = array();
-        $raw_bytes = new AMQPBufferWriter();
+        if ($this->properties == []) {
+            return "\x0\x0"; // optimization for empty properties
+        } else {
+            $shift = 15;
+            $flag_bits = 0;
+            $flags = array();
+            $raw_bytes = new AMQPBufferWriter();
 
-        foreach ($this->prop_types as $key => $prototype) {
-            $val = isset($this->properties[$key]) ? $this->properties[$key] : null;
+            foreach ($this->prop_types as $key => $prototype) {
+                $val = isset($this->properties[$key]) ? $this->properties[$key] : null;
 
-            // Very important: PHP type eval is weak, use the === to test the
-            // value content. Zero or false value should not be removed
-            if ($val === null) {
+                // Very important: PHP type eval is weak, use the === to test the
+                // value content. Zero or false value should not be removed
+                if ($val === null) {
+                    $shift -= 1;
+                    continue;
+                }
+
+                if ($shift === 0) {
+                    $flags[] = $flag_bits;
+                    $flag_bits = 0;
+                    $shift = 15;
+                }
+
+                $flag_bits |= (1 << $shift);
+                if ($prototype != 'bit') {
+                    $raw_bytes->{'write_' . $prototype}($val);
+                }
+
                 $shift -= 1;
-                continue;
             }
 
-            if ($shift === 0) {
-                $flags[] = $flag_bits;
-                $flag_bits = 0;
-                $shift = 15;
+            $flags[] = $flag_bits;
+            $result = new AMQPBufferWriter();
+            foreach ($flags as $flag_bits) {
+                $result->write_short($flag_bits);
             }
+            $result->write($raw_bytes->getvalue());
 
-            $flag_bits |= (1 << $shift);
-            if ($prototype != 'bit') {
-                $raw_bytes->{'write_' . $prototype}($val);
-            }
-
-            $shift -= 1;
+            return $result->getvalue();
         }
-
-        $flags[] = $flag_bits;
-        $result = new AMQPBufferWriter();
-        foreach ($flags as $flag_bits) {
-            $result->write_short($flag_bits);
-        }
-
-        $result->write($raw_bytes->getvalue());
-
-        return $result->getvalue();
     }
 }

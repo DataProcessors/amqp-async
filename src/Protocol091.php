@@ -8,6 +8,7 @@ use DataProcessors\AMQP\Constants\ExchangeMethods;
 use DataProcessors\AMQP\Constants\QueueMethods;
 use DataProcessors\AMQP\Constants\BasicMethods;
 use DataProcessors\AMQP\Constants\ConnectionMethods;
+use DataProcessors\AMQP\Constants\Constants091;
 
 class Protocol091
 {

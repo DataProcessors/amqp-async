@@ -80,10 +80,11 @@ class AMQPChannel
 
     /**
      * @param array $frame
+     * @return \Generator
      */
-    protected function sendMethodFrame(array $frame)
+    protected function sendMethodFrame(array $frame): \Generator
     {
-        yield $this->connection->sendChannelMethodFrame($this->channel_id, $frame);
+        return $this->connection->sendChannelMethodFrame($this->channel_id, $frame);
     }
 
     /**
@@ -466,6 +467,7 @@ class AMQPChannel
      * @param string $routing_key
      * @param bool $mandatory
      * @param bool $immediate
+     * @return \Generator
      */
     public function basic_publish(
         AMQPMessage $msg,
@@ -473,16 +475,48 @@ class AMQPChannel
         string $routing_key = '',
         bool $mandatory = false,
         bool $immediate = false
-    ) {
-        yield $this->sendMethodFrame($this->protocolWriter->basicPublish(0, $exchange, $routing_key, $mandatory, $immediate));
-        yield $this->connection->sendChannelContent(
-            $this->channel_id,
-            60,
-            0,
-            $msg->body_size,
-            $msg->serialize_properties(),
-            $msg->body
-        );
+    ): \Generator {
+        $data = chr(1); // METHOD frame type
+        $data .= pack('n', $this->channel_id);
+        $data .= pack('N', strlen($exchange) + strlen($routing_key) + 9);
+        $data .= "\x00\x3C\x00\x28\x00\x00"; // BASIC; PUBLISH; zeros
+        $data .= chr(strlen($exchange));
+        $data .= $exchange;
+        $data .= chr(strlen($routing_key));
+        $data .= $routing_key;
+        $bits = ($mandatory ? 1 : 0) | ($immediate ? 2 : 0);
+        $data .= chr($bits);
+        $data .= "\xCE\x02"; // FRAME END; HEADER frame type
+
+        ////////// HEADER //////////
+        $packed_properties = $msg->serializeProperties();
+        $data .= pack('n', $this->channel_id);
+        $data .= pack('N', strlen($packed_properties) + 12);
+        $data .= "\x00\x3C\x00\x00"; // BASIC; 0
+        $data .= pack('J', $msg->body_size);
+        $data .= $packed_properties;
+
+        ////////// BODY //////////
+        if ($msg->body_size <= $this->connection->frame_max - 8) { // payload fits in single body frame
+            $data .= "\xCE\x03"; // FRAME END; BODY FRAME type
+            $data .= pack('n', $this->channel_id);
+            $data .= pack('N', $msg->body_size);
+            $data .= $msg->body;
+            $data .= "\xCE"; // FRAME END
+        } else { // multiple body frames
+            $data .= "\xCE"; // FRAME END
+            $position = 0;
+            while ($position < $msg->body_size) {
+                $payload = substr($msg->body, $position, $this->connection->frame_max - 8);
+                $position += $this->connection->frame_max - 8;
+                $data .= "\x03"; // BODY FRAME type
+                $data .= pack('n', $this->channel_id);
+                $data .= pack('N', strlen($payload));
+                $data .= $payload;
+                $data .= "\xCE"; // FRAME END
+            }
+        }
+        return $this->connection->sendRaw($data);
     }
 
     /**
@@ -834,7 +868,7 @@ class AMQPChannel
         $msg->body_size = $this->bufferReader->read_longlong();
         //
         $this->bufferReader->reuse(substr($payload, 12, strlen($payload) - 12));
-        $msg->load_properties($this->bufferReader);
+        $msg->loadProperties($this->bufferReader);
     }
 
     /**

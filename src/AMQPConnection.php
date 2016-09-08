@@ -62,7 +62,7 @@ class AMQPConnection
     protected $channel_max = 65535;
 
     /** @var int */
-    protected $frame_max = 131072;
+    public $frame_max = 131072;
 
     /** @var int */
     public $version_major;
@@ -210,7 +210,6 @@ class AMQPConnection
         yield $this->syncWaitChannel0([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::OPEN_OK]]);
         ///
         $coroutine = new Coroutine($this->pump()); // pump needs to stay running as a coroutine, reading and dispatching messages
-        $coroutine->done();
         ///
         if ($this->heartbeat > 0) {
             $this->outputHeartbeatCoroutine = new Coroutine($this->outputHeartbeatLoop());
@@ -418,46 +417,15 @@ class AMQPConnection
     }
 
     /**
-     * Sends content (HEADER/BODY frames)
-     *
-     * @param int $channel_id
-     * @param int $class_id
-     * @param int $weight
-     * @param int $body_size
-     * @param string $packed_properties
-     * @param string $body
-     */
-    public function sendChannelContent(int $channel_id, int $class_id, int $weight, int $body_size, string $packed_properties, string $body)
+    * Send raw data
+    *
+    * @param string $data
+    */
+
+    public function sendRaw(string $data): \Generator
     {
-        $w = new AMQPBufferWriter();
-
-        /// HEADER ///
-        $w->write_octet(2);
-        $w->write_short($channel_id);
-        $w->write_long(strlen($packed_properties) + 12);
-        $w->write_short($class_id);
-        $w->write_short($weight);
-        $w->write_longlong($body_size);
-        $w->write($packed_properties);
-        $w->write_octet(Constants091::FRAME_END);
-
-        /// BODY ///
-        $position = 0;
-        while ($position < $body_size) {
-            $payload = substr($body, $position, $this->frame_max - 8);
-            $position += $this->frame_max - 8;
-
-            $w->write_octet(3);
-            $w->write_short($channel_id);
-            $w->write_long(strlen($payload));
-
-            $w->write($payload);
-
-            $w->write_octet(Constants091::FRAME_END);
-        }
-
         $this->something_sent_between_heartbeat_checks = true;
-        yield $this->client->write($w->getvalue());
+        return $this->client->write($data);
     }
 
     /**
@@ -516,8 +484,20 @@ class AMQPConnection
      */
     public function pump()
     {
-        while ($this->isOpen()) {
-            yield $this->next();
+        try {
+            while ($this->isOpen()) {
+                yield $this->next();
+            }
+        } catch (\Exception $e) {
+            if ($this->outputHeartbeatCoroutine) {
+                $this->outputHeartbeatCoroutine->cancel();
+                $this->outputHeartbeatCoroutine = null;
+            }
+            if ($this->inputHeartbeatCoroutine) {
+                $this->inputHeartbeatCoroutine->cancel();
+                $this->inputHeartbeatCoroutine = null;
+            }
+            yield $this->client->close();
         }
     }
 
@@ -563,8 +543,6 @@ class AMQPConnection
     public function next()
     {
         list($frame_type, $channel_id, $payload) = (yield $this->waitForFrame());
-
-        //echo "[" . date('Y-m-d H:i:s') . "] Received frame on channel $channel_id [" . $this->frameInfo($frame_type, $channel_id, $payload) . "] payload size " . strlen($payload) . "\n";
 
         if (!isset($this->channels[$channel_id])) {
             throw new Exception\AMQPRuntimeException("Received frame on non-existent channel number $channel_id");
