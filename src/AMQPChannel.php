@@ -48,12 +48,38 @@ class AMQPChannel
     /** @var bool */
     public $pendingClose = false;
 
+    /** @var callable */
+    private $onClosing;
+
+    /** @var callable */
+    private $onClosed;
+
     public function __construct(AMQPConnection $connection, int $channel_id)
     {
         $this->connection = $connection;
         $this->channel_id = $channel_id;
         $this->protocolWriter = new Protocol091();
         $this->bufferReader = new AMQPBufferReader();
+    }
+
+    /**
+     * Set onClosing event handler
+     *
+     * @param callable $onClosing
+     */
+    public function setOnClosingHandler(callable $onClosing)
+    {
+        $this->onClosing = $onClosing;
+    }
+
+    /**
+     * Set onClosed event handler
+     *
+     * @param callable $onClosing
+     */
+    public function setOnClosedHandler(callable $onClosed)
+    {
+        $this->onClosed = $onClosed;
     }
 
     /**
@@ -435,6 +461,11 @@ class AMQPChannel
             $this->doClose();
             return; // already closed
         }
+
+        if (null !== $this->onClosing) {
+            ($this->onClosing)();
+        }
+
         yield $this->sendMethodFrame($this->protocolWriter->channelClose($reply_code, $reply_text, $class_id, $method_id));
 
         $this->pendingClose = true;
@@ -452,6 +483,10 @@ class AMQPChannel
         $this->channel_id = null;
         $this->connection = null;
         $this->is_open = false;
+
+        if (null !== $this->onClosed) {
+            ($this->onClosed)();
+        }
     }
 
     public function isClosed()
@@ -476,6 +511,10 @@ class AMQPChannel
         bool $mandatory = false,
         bool $immediate = false
     ): \Generator {
+        if ($this->connection === null) {
+            throw new Exception\AMQPConnectionException("AMQP Connection is closed");
+        }
+
         $data = chr(1); // METHOD frame type
         $data .= pack('n', $this->channel_id);
         $data .= pack('N', strlen($exchange) + strlen($routing_key) + 9);

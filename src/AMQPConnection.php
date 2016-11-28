@@ -79,6 +79,12 @@ class AMQPConnection
     /** @var string */
     public $locales;
 
+    /** @var callable */
+    private $onClosing;
+
+    /** @var callable */
+    private $onClosed;
+
     public function __construct()
     {
         $this->bufferReader = new AMQPBufferReader();
@@ -113,6 +119,26 @@ class AMQPConnection
     }
 
     /**
+     * Set onClosing event handler
+     *
+     * @param callable $onClosing
+     */
+    public function setOnClosingHandler(callable $onClosing)
+    {
+        $this->onClosing = $onClosing;
+    }
+
+    /**
+     * Set onClosed event handler
+     *
+     * @param callable $onClosing
+     */
+    public function setOnClosedHandler(callable $onClosed)
+    {
+        $this->onClosed = $onClosed;
+    }
+
+    /**
      * Requests a connection close
      *
      * @param int $reply_code
@@ -126,6 +152,10 @@ class AMQPConnection
         if (!$this->isOpen()) {
             yield null;
             return;
+        }
+
+        if (null !== $this->onClosing) {
+            ($this->onClosing)();
         }
 
         if ($this->outputHeartbeatCoroutine) {
@@ -145,6 +175,10 @@ class AMQPConnection
         $this->channels[0]->add_wait([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::CLOSE_OK]], $deferred, null, null);
         yield $deferred->getPromise();
         yield $this->client->close();
+
+        if (null !== $this->onClosed) {
+            ($this->onClosed)();
+        }
     }
 
     /**
