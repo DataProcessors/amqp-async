@@ -5,6 +5,8 @@
 
 **amqp-async** is an implementation of the AMQP 0.9.1 protocol for PHP designed to work with [Icicle](https://github.com/icicleio/icicle).
 
+Potentially supporting [Amp](https://github.com/amphp/amp) in the future.
+
 
 ##### Requirements
 
