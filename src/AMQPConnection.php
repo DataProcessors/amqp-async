@@ -244,6 +244,13 @@ class AMQPConnection
         yield $this->syncWaitChannel0([['class_id'=>ClassTypes::CONNECTION, 'method_id'=>ConnectionMethods::OPEN_OK]]);
         ///
         $coroutine = new Coroutine($this->pump()); // pump needs to stay running as a coroutine, reading and dispatching messages
+        $coroutine->done(
+            null,
+            function (\Exception $e) {
+                // Re-throw exception
+                throw $e;
+            }
+        );
         ///
         if ($this->heartbeat > 0) {
             $this->outputHeartbeatCoroutine = new Coroutine($this->outputHeartbeatLoop());
@@ -532,6 +539,9 @@ class AMQPConnection
                 $this->inputHeartbeatCoroutine = null;
             }
             yield $this->client->close();
+
+            // Re-throw exception so it can be catched by the main loop
+            throw $e;
         }
     }
 
